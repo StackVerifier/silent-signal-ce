@@ -7,12 +7,14 @@ import { SettingsPageHeader } from '@/components/settings/page-header'
 import { MembersTable } from '@/components/members/members-table'
 import { InvitationStatusBadge, relativeTime } from '@/components/members/member-status-badge'
 import { PermissionGuard } from '@/components/rbac/permission-guard'
-import { EmptyState } from '@/components/states/data-states'
-import { useGatedData } from '@/hooks/use-gated-data'
+import { EmptyState, ErrorState } from '@/components/states/data-states'
+import { useGatedQuery } from '@/hooks/use-gated-data'
+import { useInvitations, useMembers } from '@/lib/query/hooks'
 import { useAuth } from '@/lib/auth-context'
 import { PERMISSIONS } from '@/lib/rbac/permissions'
 import { getRoleLabel } from '@/lib/rbac/roles'
-import { mockInvitations, mockMembers, mockWorkspaces } from '@/lib/mock-tenancy'
+import { mockWorkspaces } from '@/lib/mock-tenancy'
+import type { Invitation } from '@/lib/rbac/types'
 
 type Tab = 'members' | 'invitations'
 
@@ -20,18 +22,24 @@ export default function MembersPage() {
   const { can } = useAuth()
   const [tab, setTab] = useState<Tab>('members')
 
-  const members = useGatedData(mockMembers, { permission: PERMISSIONS.MEMBERS_READ, delay: 350 })
-  const invitations = useGatedData(mockInvitations, { permission: PERMISSIONS.MEMBERS_READ, delay: 500 })
+  const members = useGatedQuery(useMembers(), { permission: PERMISSIONS.MEMBERS_READ })
+  const invitations = useGatedQuery(useInvitations(), { permission: PERMISSIONS.MEMBERS_READ })
 
-  const pendingCount = mockMembers.filter((member) => member.status === 'pending').length
-  const pendingInvites = mockInvitations.filter((invitation) => invitation.status === 'pending').length
+  const memberList = members.data?.data ?? []
+  const invitationList = invitations.data ?? []
+  const pendingCount = memberList.filter((member) => member.status === 'pending').length
+  const pendingInvites = invitationList.filter((invitation) => invitation.status === 'pending').length
 
   return (
     <PermissionGuard permission={PERMISSIONS.MEMBERS_READ} showDenied>
       <div className="flex-1 flex flex-col overflow-hidden">
         <SettingsPageHeader
           title="Members"
-          description={`${mockMembers.length} members · ${pendingCount} awaiting approval`}
+          description={
+            members.isSkeleton
+              ? 'Loading members…'
+              : `${memberList.length} members · ${pendingCount} awaiting approval`
+          }
           action={
             can(PERMISSIONS.MEMBERS_INVITE) ? (
               <button className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#6C63FF] hover:bg-[#5B52CC] text-white rounded-lg font-medium text-sm transition-colors">
@@ -63,9 +71,23 @@ export default function MembersPage() {
             </div>
 
             {tab === 'members' ? (
-              <MembersTable members={members.data ?? []} isLoading={members.isSkeleton} />
+              members.state === 'error' ? (
+                <ErrorState
+                  title="Unable to load members"
+                  description={members.errorMessage ?? undefined}
+                  onRetry={members.retry}
+                />
+              ) : (
+                <MembersTable members={memberList} isLoading={members.isSkeleton} />
+              )
+            ) : invitations.state === 'error' ? (
+              <ErrorState
+                title="Unable to load invitations"
+                description={invitations.errorMessage ?? undefined}
+                onRetry={invitations.retry}
+              />
             ) : (
-              <InvitationList invitations={invitations.data ?? []} isLoading={invitations.isSkeleton} />
+              <InvitationList invitations={invitationList} isLoading={invitations.isSkeleton} />
             )}
           </div>
         </div>
@@ -78,7 +100,7 @@ function InvitationList({
   invitations,
   isLoading,
 }: {
-  invitations: typeof mockInvitations
+  invitations: Invitation[]
   isLoading: boolean
 }) {
   const { can } = useAuth()

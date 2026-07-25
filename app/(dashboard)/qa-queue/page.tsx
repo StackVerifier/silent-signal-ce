@@ -3,6 +3,8 @@
 import dynamic from 'next/dynamic'
 import { GatedPage } from '@/components/rbac/gated-page'
 import { QueueSkeleton } from '@/components/dashboard/page-skeletons'
+import { useGatedQuery } from '@/hooks/use-gated-data'
+import { useQaQueue } from '@/lib/query/hooks'
 import { PERMISSIONS } from '@/lib/rbac/permissions'
 
 // Route-level code splitting: each page ships its own chunk and streams in
@@ -13,11 +15,14 @@ const QAQueueMonitoring = dynamic(
 )
 
 export default function Page() {
+  const result = useGatedQuery(useQaQueue(), { permission: PERMISSIONS.QA_READ })
+
   return (
     <GatedPage
       title="QA Queue"
       permission={PERMISSIONS.QA_READ}
       skeleton={<QueueSkeleton />}
+      result={result}
     >
       <QAQueueMonitoring />
     </GatedPage>

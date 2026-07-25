@@ -6,14 +6,15 @@ import { Topbar } from '@/components/layout/topbar'
 import { PermissionGuard } from '@/components/rbac/permission-guard'
 import { EmptyState } from '@/components/states/data-states'
 import { SkeletonCard } from '@/components/ui/skeleton'
-import { useGatedData } from '@/hooks/use-gated-data'
+import { useGatedQuery } from '@/hooks/use-gated-data'
+import { useTeams } from '@/lib/query/hooks'
 import { useAuth } from '@/lib/auth-context'
 import { PERMISSIONS } from '@/lib/rbac/permissions'
-import { mockMembers, mockTeams, mockWorkspaces } from '@/lib/mock-tenancy'
+import { mockMembers, mockWorkspaces } from '@/lib/mock-tenancy'
 
 export default function TeamsPage() {
   const { can, workspace } = useAuth()
-  const teams = useGatedData(mockTeams, { permission: PERMISSIONS.TEAMS_READ, delay: 350 })
+  const teams = useGatedQuery(useTeams(), { permission: PERMISSIONS.TEAMS_READ })
   const canWrite = can(PERMISSIONS.TEAMS_WRITE)
 
   const grouped = mockWorkspaces
