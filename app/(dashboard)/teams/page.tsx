@@ -30,7 +30,7 @@ export default function TeamsPage() {
       <div className="flex flex-col h-full overflow-hidden">
         <Topbar title="Teams" />
         <div className="flex-1 overflow-y-auto">
-          <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
+          <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-[1600px] mx-auto">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-[#E2E8F0]">Team management</h2>

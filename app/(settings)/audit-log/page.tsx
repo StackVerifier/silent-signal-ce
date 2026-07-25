@@ -22,7 +22,7 @@ export default function AuditLogPage() {
         description="View all workspace activity and changes"
       />
 
-      <div className="flex-1 overflow-y-auto px-8 py-6">
+      <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6">
         <div className="max-w-4xl">
           <div className="space-y-2">
             {mockAuditLogs.map((log, idx) => (

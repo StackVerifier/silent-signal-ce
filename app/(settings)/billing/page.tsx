@@ -22,7 +22,7 @@ export default function BillingPage() {
         description="Manage your subscription and usage"
       />
 
-      <div className="flex-1 overflow-y-auto px-8 py-6">
+      <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6">
         <div className="max-w-3xl space-y-6">
           {/* Current Plan */}
           <motion.div

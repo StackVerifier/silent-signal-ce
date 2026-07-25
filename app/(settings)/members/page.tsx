@@ -50,7 +50,7 @@ export default function MembersPage() {
           }
         />
 
-        <div className="flex-1 overflow-y-auto px-8 py-6">
+        <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6">
           <div className="max-w-6xl">
             <div className="flex items-center gap-1 mb-4 border-b border-[#1E2D4A]" role="tablist">
               {(['members', 'invitations'] as Tab[]).map((value) => (

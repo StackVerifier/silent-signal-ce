@@ -1,6 +1,6 @@
 import { Skeleton, SkeletonCard, SkeletonChart, SkeletonMetricTile, SkeletonTable } from '@/components/ui/skeleton'
 
-const shell = 'p-6 space-y-6 max-w-[1600px] mx-auto'
+const shell = 'p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-[1600px] mx-auto'
 
 /**
  * Page-shaped skeletons. Each mirrors the real layout of its page so the

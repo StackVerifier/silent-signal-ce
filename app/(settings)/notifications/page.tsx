@@ -15,7 +15,7 @@ export default function NotificationsPage() {
         description={`${unread} unread notification${unread !== 1 ? 's' : ''}`}
       />
 
-      <div className="flex-1 overflow-y-auto px-8 py-6">
+      <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6">
         <div className="space-y-3 max-w-3xl">
           {mockNotifications.length === 0 ? (
             <div className="py-12 text-center">

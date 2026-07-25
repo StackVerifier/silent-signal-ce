@@ -17,7 +17,7 @@ export default function ProfilePage() {
         description="Manage your account settings and preferences"
       />
 
-      <div className="flex-1 overflow-y-auto px-8 py-6">
+      <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6">
         <div className="max-w-2xl space-y-6">
           {/* Profile Card */}
           <motion.div

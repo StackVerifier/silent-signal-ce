@@ -3,8 +3,9 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { ChevronLeft, ChevronRight, Search, LogOut, Lock } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Search, LogOut, Lock, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useIsDesktop } from '@/hooks/use-media-query'
 import { cn } from '@/lib/utils'
 import { useDashboardStore } from '@/store/dashboard-store'
 import { useAuth } from '@/lib/auth-context'
@@ -31,14 +32,25 @@ const COLLAPSE_STORAGE_KEY = 'ss_sidebar_collapsed'
 export function Sidebar() {
   const pathname = usePathname()
   const setCommandPaletteOpen = useDashboardStore((state) => state.setCommandPaletteOpen)
+  const mobileNavOpen = useDashboardStore((state) => state.mobileNavOpen)
+  const setMobileNavOpen = useDashboardStore((state) => state.setMobileNavOpen)
   const { permissions, member, role, isGated, logout } = useAuth()
+  const isDesktop = useIsDesktop()
   const [collapsed, setCollapsed] = useState(false)
+
+  // The drawer only collapses on desktop; on mobile it is always full width.
+  const showLabels = !collapsed || !isDesktop
 
   // Read the persisted preference after mount to avoid a hydration mismatch,
   // while still rendering the sidebar on the server (no layout shift).
   useEffect(() => {
     setCollapsed(localStorage.getItem(COLLAPSE_STORAGE_KEY) === '1')
   }, [])
+
+  // Close the drawer whenever navigation happens, so a tap never leaves it open.
+  useEffect(() => {
+    setMobileNavOpen(false)
+  }, [pathname, setMobileNavOpen])
 
   const toggleCollapsed = useCallback(() => {
     setCollapsed((current) => {
@@ -67,11 +79,11 @@ export function Sidebar() {
         key={item.id}
         href={item.href}
         aria-current={active ? 'page' : undefined}
-        title={collapsed ? item.label : undefined}
+        title={!showLabels ? item.label : undefined}
         className={cn(
           'relative flex items-center gap-2.5 px-2 py-2.5 rounded-lg transition-colors duration-150 group min-w-0',
           'focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6C63FF] focus-visible:ring-inset',
-          collapsed && 'justify-center px-2',
+          !showLabels && 'justify-center px-2',
           active
             ? 'bg-[#6C63FF]/15 text-[#6C63FF]'
             : 'text-[#64748B] hover:bg-[#151D32] hover:text-[#94A3B8]',
@@ -85,7 +97,7 @@ export function Sidebar() {
           />
         )}
         <item.icon aria-hidden="true" className="w-4 h-4 flex-shrink-0" />
-        {!collapsed && (
+        {showLabels && (
           <>
             <span className="flex-1 min-w-0 text-sm font-medium truncate">{item.label}</span>
             <span className="flex items-center gap-1.5 flex-shrink-0">
@@ -113,12 +125,33 @@ export function Sidebar() {
   }
 
   return (
-    <motion.aside
-      animate={{ width: collapsed ? 64 : 248 }}
-      transition={{ duration: 0.2, ease: 'easeInOut' }}
-      className="relative flex flex-col h-dvh bg-[#111827] border-r border-[#1E2D4A] flex-shrink-0 overflow-hidden z-20"
+    <aside
+      id="app-sidebar"
+      aria-label="Sidebar"
+      aria-hidden={!isDesktop && !mobileNavOpen}
+      className={cn(
+        // Mobile: off-canvas drawer. Desktop: in-flow rail that changes width.
+        'fixed inset-y-0 left-0 z-50 flex w-[280px] flex-col bg-[#111827] border-r border-[#1E2D4A]',
+        'overflow-hidden transition-transform duration-200 ease-out',
+        'lg:static lg:z-20 lg:h-dvh lg:flex-shrink-0 lg:translate-x-0',
+        'lg:transition-[width] lg:duration-200',
+        collapsed ? 'lg:w-16' : 'lg:w-[248px]',
+        // Off-canvas content must not be reachable by Tab.
+        mobileNavOpen
+          ? 'translate-x-0'
+          : '-translate-x-full invisible lg:visible lg:pointer-events-auto pointer-events-none',
+      )}
     >
-      <WorkspaceSwitcher collapsed={collapsed} />
+      {/* Drawer close — mobile only; desktop uses the collapse control below. */}
+      <button
+        onClick={() => setMobileNavOpen(false)}
+        aria-label="Close navigation"
+        className="lg:hidden absolute top-3 right-3 z-10 p-2 rounded-lg text-[#64748B] hover:text-[#E2E8F0] hover:bg-[#151D32] transition-colors"
+      >
+        <X aria-hidden="true" className="w-4 h-4" />
+      </button>
+
+      <WorkspaceSwitcher collapsed={!showLabels} />
 
       {/* Search */}
       <div className="px-3 py-3 border-b border-[#1E2D4A]">
@@ -127,11 +160,11 @@ export function Sidebar() {
           aria-label="Open command palette"
           className={cn(
             'w-full flex items-center gap-2 rounded-lg bg-[#151D32] border border-[#1E2D4A] text-[#64748B] hover:text-[#94A3B8] hover:border-[#6C63FF]/40 transition-colors text-xs',
-            collapsed ? 'justify-center p-2' : 'px-3 py-2',
+            showLabels ? 'px-3 py-2' : 'justify-center p-2',
           )}
         >
           <Search aria-hidden="true" className="w-3.5 h-3.5 flex-shrink-0" />
-          {!collapsed && (
+          {showLabels && (
             <>
               <span className="flex-1 text-left">Search...</span>
               <kbd className="text-[10px] bg-[#1E2D4A] px-1.5 py-0.5 rounded font-mono">⌘K</kbd>
@@ -150,7 +183,7 @@ export function Sidebar() {
           if (items.length === 0) return null
           return (
             <div key={section.id}>
-              {!collapsed && (
+              {showLabels && (
                 <p className="px-2 pb-1 text-[10px] font-semibold text-[#64748B] uppercase tracking-widest">
                   {section.label}
                 </p>
@@ -169,13 +202,13 @@ export function Sidebar() {
           <div
             className={cn(
               'flex items-center gap-2.5 rounded-lg px-2 py-2',
-              collapsed && 'justify-center',
+              !showLabels && 'justify-center',
             )}
           >
             <div className="w-7 h-7 rounded-full bg-[#6C63FF]/20 border border-[#6C63FF]/40 flex items-center justify-center text-[10px] font-bold text-[#6C63FF] shrink-0">
               {member.avatar ?? member.name.slice(0, 2).toUpperCase()}
             </div>
-            {!collapsed && (
+            {showLabels && (
               <>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium text-[#E2E8F0] truncate">{member.name}</p>
@@ -199,7 +232,7 @@ export function Sidebar() {
           aria-expanded={!collapsed}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           className={cn(
-            'w-full flex items-center gap-2.5 px-2 py-2 rounded-lg text-[#64748B] hover:bg-[#151D32] hover:text-[#94A3B8] transition-colors',
+            'hidden lg:flex w-full items-center gap-2.5 px-2 py-2 rounded-lg text-[#64748B] hover:bg-[#151D32] hover:text-[#94A3B8] transition-colors',
             collapsed && 'justify-center',
           )}
         >
@@ -213,6 +246,6 @@ export function Sidebar() {
           )}
         </button>
       </div>
-    </motion.aside>
+    </aside>
   )
 }
