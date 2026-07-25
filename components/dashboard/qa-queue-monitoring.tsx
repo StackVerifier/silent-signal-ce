@@ -203,7 +203,9 @@ function QAQueueTable() {
             >
               <div className="col-span-2 flex items-center gap-2">
                 {item.reopenCount > 0 && (
-                  <RefreshCw className="w-3 h-3 text-[#EF4444] flex-shrink-0" title={`Reopened ${item.reopenCount}x`} />
+                  <span title={`Reopened ${item.reopenCount}x`}>
+                  <RefreshCw className="w-3 h-3 text-[#EF4444] flex-shrink-0" />
+                </span>
                 )}
                 <span className="text-xs font-mono font-semibold text-[#6C63FF]">{item.issueKey}</span>
               </div>

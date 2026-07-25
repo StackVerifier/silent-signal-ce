@@ -135,7 +135,7 @@ export function MetricTile({
   value: string | number
   unit?: string
   color: string
-  icon?: React.ComponentType<{ className?: string }>
+  icon?: React.ComponentType<{ className?: string; style?: React.CSSProperties }>
   trend?: 'up' | 'down' | 'stable'
 }) {
   return (

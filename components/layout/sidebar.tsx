@@ -13,12 +13,12 @@ import { useDashboardStore } from '@/store/dashboard-store'
 import { useState, useEffect } from 'react'
 
 const navItems = [
-  { id: 'dashboard',     label: 'Dashboard',          icon: LayoutDashboard, href: '/',                badge: null },
-  { id: 'sprint',        label: 'Sprint Intelligence', icon: Zap,             href: '/sprint',           badge: '42' },
-  { id: 'release',       label: 'Release Control',     icon: GitBranch,       href: '/release',          badge: null },
-  { id: 'qa-queue',      label: 'QA Queue',            icon: FlaskConical,    href: '/qa-queue',         badge: '18' },
-  { id: 'risk-timeline', label: 'Risk Timeline',       icon: Clock,           href: '/risk-timeline',    badge: null },
-  { id: 'rules',         label: 'Rule Management',     icon: Shield,          href: '/rules',            badge: '24' },
+  { id: 'dashboard',     label: 'Dashboard',          icon: LayoutDashboard, href: '/',                badge: null,  shortcut: '1' },
+  { id: 'sprint',        label: 'Sprint Intelligence', icon: Zap,             href: '/sprint',           badge: '42',  shortcut: '2' },
+  { id: 'release',       label: 'Release Control',     icon: GitBranch,       href: '/release',          badge: null,  shortcut: '3' },
+  { id: 'qa-queue',      label: 'QA Queue',            icon: FlaskConical,    href: '/qa-queue',         badge: '18',  shortcut: '4' },
+  { id: 'risk-timeline', label: 'Risk Timeline',       icon: Clock,           href: '/risk-timeline',    badge: null,  shortcut: '5' },
+  { id: 'rules',         label: 'Rule Management',     icon: Shield,          href: '/rules',            badge: '24',  shortcut: '6' },
 ] as const
 
 const bottomItems = [
@@ -134,10 +134,22 @@ export function Sidebar() {
                   </motion.span>
                 )}
               </AnimatePresence>
-              {!collapsed && item.badge && (
-                <span className="text-[10px] bg-[#1E2D4A] text-[#64748B] px-1.5 py-0.5 rounded font-mono">
-                  {item.badge}
-                </span>
+              {!collapsed && (
+                <div className="flex items-center gap-1.5">
+                  {item.badge && (
+                    <span className="text-[10px] bg-[#1E2D4A] text-[#64748B] px-1.5 py-0.5 rounded font-mono">
+                      {item.badge}
+                    </span>
+                  )}
+                  <span className={cn(
+                    'text-[9px] font-mono px-1 py-0.5 rounded border transition-opacity',
+                    active
+                      ? 'text-[#6C63FF]/60 border-[#6C63FF]/20 bg-transparent'
+                      : 'text-[#64748B]/50 border-[#1E2D4A]/50 bg-transparent opacity-0 group-hover:opacity-100'
+                  )}>
+                    {item.shortcut}
+                  </span>
+                </div>
               )}
             </Link>
           )

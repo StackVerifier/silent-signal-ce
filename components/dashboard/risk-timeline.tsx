@@ -8,7 +8,8 @@ import {
 } from 'lucide-react'
 import { SectionCard } from './shared'
 import { riskTimeline, signals } from '@/lib/mock-data'
-import type { RiskTimelineEvent, Severity } from '@/lib/types'
+import type { RiskTimelineEvent } from '@/lib/mock-data'
+import type { Severity } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 function EventIcon({ type }: { type: RiskTimelineEvent['type'] }) {
