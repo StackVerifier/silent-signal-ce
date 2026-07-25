@@ -1,8 +1,9 @@
 'use client'
 
+import { useNow } from '@/hooks/use-now'
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { AlertTriangle, CheckCircle, Clock, Zap, TrendingDown, Plus } from 'lucide-react'
+import { AlertTriangle, CheckCircle, Clock } from 'lucide-react'
 import { SectionCard, ScoreBar, PriorityBadge, RiskLevelBadge } from './shared'
 import { useSprints } from '@/lib/query/hooks'
 import type { Sprint } from '@/lib/types'
@@ -117,8 +118,9 @@ function IssueRow({ issue, index }: { issue: Issue; index: number }) {
 }
 
 function SprintHealthPanel({ sprint }: { sprint: Sprint }) {
+  const now = useNow()
   const completionPct = Math.round((sprint.completedPoints / sprint.totalPoints) * 100)
-  const daysLeft = Math.max(0, Math.ceil((sprint.endDate.getTime() - Date.now()) / 86400000))
+  const daysLeft = Math.max(0, Math.ceil((sprint.endDate.getTime() - now) / 86400000))
   const totalDays = Math.ceil((sprint.endDate.getTime() - sprint.startDate.getTime()) / 86400000)
   const elapsedPct = Math.round(((totalDays - daysLeft) / totalDays) * 100)
   const velocityDelta = sprint.velocity - sprint.previousVelocity

@@ -53,6 +53,35 @@ function Select({
   )
 }
 
+/**
+ * Sortable column header. Defined at module scope: a component created inside
+ * the table's render would be a new type on every render, remounting the header
+ * and losing focus mid-interaction.
+ */
+function SortHeader({
+  label, sortValue, sortKey, sortAsc, onSort,
+}: {
+  label: string
+  sortValue: SortKey
+  sortKey: SortKey
+  sortAsc: boolean
+  onSort: (key: SortKey) => void
+}) {
+  return (
+    <button
+      onClick={() => onSort(sortValue)}
+      className="flex items-center gap-1 text-[10px] font-semibold text-[#64748B] uppercase tracking-widest hover:text-[#94A3B8] transition-colors"
+      aria-label={`Sort by ${label}`}
+    >
+      {label}
+      {sortKey === sortValue &&
+        (sortAsc
+          ? <ChevronUp aria-hidden="true" className="w-3 h-3" />
+          : <ChevronDown aria-hidden="true" className="w-3 h-3" />)}
+    </button>
+  )
+}
+
 export function MembersTable({
   members,
   isLoading = false,
@@ -171,20 +200,6 @@ export function MembersTable({
 
   if (isLoading) return <SkeletonTable rows={6} columns={6} />
 
-  const SortHeader = ({ label, sortValue }: { label: string; sortValue: SortKey }) => (
-    <button
-      onClick={() => toggleSort(sortValue)}
-      className="flex items-center gap-1 text-[10px] font-semibold text-[#64748B] uppercase tracking-widest hover:text-[#94A3B8] transition-colors"
-      aria-label={`Sort by ${label}`}
-    >
-      {label}
-      {sortKey === sortValue &&
-        (sortAsc
-          ? <ChevronUp aria-hidden="true" className="w-3 h-3" />
-          : <ChevronDown aria-hidden="true" className="w-3 h-3" />)}
-    </button>
-  )
-
   return (
     <div className="space-y-3">
       {/* Filters — sticky so they survive scrolling a long member list */}
@@ -261,11 +276,11 @@ export function MembersTable({
                     className="accent-[#6C63FF]"
                   />
                 </th>
-                <th scope="col" className="px-4 py-3"><SortHeader label="Member" sortValue="name" /></th>
-                <th scope="col" className="px-4 py-3"><SortHeader label="Role" sortValue="role" /></th>
+                <th scope="col" className="px-4 py-3"><SortHeader label="Member" sortValue="name" sortKey={sortKey} sortAsc={sortAsc} onSort={toggleSort} /></th>
+                <th scope="col" className="px-4 py-3"><SortHeader label="Role" sortValue="role" sortKey={sortKey} sortAsc={sortAsc} onSort={toggleSort} /></th>
                 <th scope="col" className="px-4 py-3 text-[10px] font-semibold text-[#64748B] uppercase tracking-widest">Workspace / Team</th>
-                <th scope="col" className="px-4 py-3"><SortHeader label="Status" sortValue="status" /></th>
-                <th scope="col" className="px-4 py-3"><SortHeader label="Last active" sortValue="lastActiveAt" /></th>
+                <th scope="col" className="px-4 py-3"><SortHeader label="Status" sortValue="status" sortKey={sortKey} sortAsc={sortAsc} onSort={toggleSort} /></th>
+                <th scope="col" className="px-4 py-3"><SortHeader label="Last active" sortValue="lastActiveAt" sortKey={sortKey} sortAsc={sortAsc} onSort={toggleSort} /></th>
                 <th scope="col" className="px-4 py-3 text-right text-[10px] font-semibold text-[#64748B] uppercase tracking-widest">Actions</th>
               </tr>
             </thead>

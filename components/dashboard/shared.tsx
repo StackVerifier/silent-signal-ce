@@ -1,6 +1,7 @@
 'use client'
 
 import { cn } from '@/lib/utils'
+import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react'
 import type { RiskLevel, Severity, IssuePriority, GateStatus } from '@/lib/types'
 import { motion } from 'framer-motion'
 
@@ -128,6 +129,17 @@ export function ScoreBar({
 
 // ─── Metric Tile ─────────────────────────────────────────────────────────────
 
+const TREND_META = {
+  up:     { Icon: ArrowUpRight,   color: '#22C55E', label: 'trending up' },
+  down:   { Icon: ArrowDownRight, color: '#EF4444', label: 'trending down' },
+  stable: { Icon: Minus,          color: '#64748B', label: 'holding steady' },
+} as const
+
+function TrendIndicator({ trend }: { trend: 'up' | 'down' | 'stable' }) {
+  const { Icon, color, label } = TREND_META[trend]
+  return <Icon aria-label={label} className="w-3.5 h-3.5 ml-0.5" style={{ color }} />
+}
+
 export function MetricTile({
   label, value, unit, color, icon: Icon, trend
 }: {
@@ -147,6 +159,7 @@ export function MetricTile({
       <div className="mt-2 flex items-baseline gap-1">
         <span className="text-2xl font-bold" style={{ color }}>{value}</span>
         {unit && <span className="text-xs text-[#64748B]">{unit}</span>}
+        {trend && <TrendIndicator trend={trend} />}
       </div>
     </div>
   )

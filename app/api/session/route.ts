@@ -6,6 +6,7 @@ import { memberRepo, orgRepo, workspaceRepo } from '@/lib/db/repositories'
 import { STATUS_CAN_AUTHENTICATE, buildAccessContext } from '@/lib/rbac/access'
 import { getServerSession } from '@/lib/auth-server'
 import { needsRehash, hashPassword, verifyPassword } from '@/lib/auth/password'
+import { clientAddress, consume, reset } from '@/lib/auth/rate-limit'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,6 +22,21 @@ export const dynamic = 'force-dynamic'
 const DUMMY_HASH =
   'scrypt$32768$8$1$AAAAAAAAAAAAAAAAAAAAAA==$' +
   'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=='
+
+/**
+ * Two limits, because they stop different attacks. The per-account limit stops
+ * guessing one password; the per-address limit stops spraying one common
+ * password across many accounts, which the per-account limit never sees.
+ */
+const PER_ACCOUNT = { limit: 5, windowMs: 15 * 60_000 }
+const PER_ADDRESS = { limit: 20, windowMs: 15 * 60_000 }
+
+function tooManyAttempts(retryAfter: number) {
+  return NextResponse.json(
+    { error: 'Too many sign-in attempts. Try again shortly.' },
+    { status: 429, headers: { 'Retry-After': String(retryAfter) } },
+  )
+}
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -75,6 +91,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Enter an email and password' }, { status: 422 })
   }
 
+  const email = parsed.data.email.toLowerCase()
+  const address = clientAddress(request)
+
+  const byAddress = consume(`ip:${address}`, PER_ADDRESS)
+  if (!byAddress.allowed) return tooManyAttempts(byAddress.retryAfter)
+
+  const byAccount = consume(`email:${email}`, PER_ACCOUNT)
+  if (!byAccount.allowed) return tooManyAttempts(byAccount.retryAfter)
+
   const credentials = await memberRepo.credentialsFor(parsed.data.email)
 
   // Hash even when the account does not exist, so the response time does not
@@ -89,6 +114,10 @@ export async function POST(request: Request) {
   if (!member) {
     return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 })
   }
+
+  // The credentials were right, so the failure counters no longer apply.
+  reset(`email:${email}`)
+  reset(`ip:${address}`)
 
   // Transparently upgrade a hash made with weaker parameters.
   if (credentials?.passwordHash && needsRehash(credentials.passwordHash)) {

@@ -1,8 +1,9 @@
 'use client'
 
+import { useNow } from '@/hooks/use-now'
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { CheckCircle, AlertTriangle, XCircle, Lock, ChevronDown, ChevronRight, Calendar, Users } from 'lucide-react'
+import { CheckCircle, AlertTriangle, Lock, ChevronDown, ChevronRight, Calendar, Users } from 'lucide-react'
 import { SectionCard, ScoreBar, PriorityBadge, GateStatusBadge, RiskLevelBadge } from './shared'
 import { useReleases } from '@/lib/query/hooks'
 import type { Release, GateStatus } from '@/lib/types'
@@ -45,7 +46,8 @@ function ConfidenceMeter({ value }: { value: number }) {
 }
 
 function ReleaseHeader({ release }: { release: Release }) {
-  const daysLeft = Math.ceil((release.targetDate.getTime() - Date.now()) / 86400000)
+  const now = useNow()
+  const daysLeft = Math.ceil((release.targetDate.getTime() - now) / 86400000)
 
   return (
     <div className="bg-[#151D32] border border-[#1E2D4A] rounded-xl p-6">

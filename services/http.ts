@@ -120,7 +120,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   } = options
 
   let attempt = 0
-  // eslint-disable-next-line no-constant-condition
+   
   while (true) {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), timeoutMs)
@@ -145,7 +145,10 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
         throw new ApiError({
           status: response.status,
           code: payload?.code ?? `http_${response.status}`,
-          message: payload?.message ?? response.statusText,
+          // Route handlers reply with `{ error }`; `message` is accepted too so
+          // a third-party endpoint's shape still produces a usable message
+          // rather than falling through to a bare "Unauthorized".
+          message: payload?.error ?? payload?.message ?? response.statusText,
           details: payload?.details,
           retryAfterMs: retryAfter ? Number(retryAfter) * 1000 : undefined,
         })

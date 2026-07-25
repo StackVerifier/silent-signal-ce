@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Dialog, DialogButton } from '@/components/ui/dialog'
@@ -9,26 +9,7 @@ import { SelectField, TextField } from '@/components/forms/fields'
 import { useToast } from '@/components/ui/toast'
 import { useSaveWebhook } from '@/lib/query/hooks'
 import type { WebhookEndpoint } from '@/services/notification.service'
-
-/**
- * Host allow-list, mirrored from the server.
- *
- * The server is the authority — this copy exists so a typo is caught before a
- * round trip, not instead of one. Without it a mistyped Slack URL would POST
- * alert contents, including issue titles, to whatever host was pasted.
- */
-const HOST_HINT: Record<string, { pattern: RegExp; message: string; placeholder: string }> = {
-  slack: {
-    pattern: /^hooks\.slack\.com$/i,
-    message: 'A Slack webhook URL must be on hooks.slack.com',
-    placeholder: 'https://hooks.slack.com/services/T000/B000/xxxxxxxx',
-  },
-  teams: {
-    pattern: /(^|\.)(office|microsoft|office365|webhook\.office)\.com$/i,
-    message: 'A Teams webhook URL must be on an Office 365 host',
-    placeholder: 'https://outlook.office.com/webhook/…',
-  },
-}
+import { WEBHOOK_HOSTS, checkWebhookUrl } from '@/lib/notifications/webhook-url'
 
 const schema = z
   .object({
@@ -42,19 +23,15 @@ const schema = z
     timezone: z.string().optional(),
   })
   .superRefine((value, ctx) => {
-    // On edit the URL may be left blank to keep the stored one; the caller
-    // passes `requireUrl` through the resolver context instead of duplicating
-    // the schema, so this only enforces shape.
-    if (!value.url) return
-    if (!value.url.startsWith('https://')) {
-      ctx.addIssue({ code: 'custom', path: ['url'], message: 'The URL must use https' })
-      return
+    // On edit the URL may be left blank to keep the stored one, so only a
+    // supplied URL is checked here — the same check the server runs, from the
+    // same module, so a typo is caught before a round trip rather than instead
+    // of one.
+    if (value.url) {
+      const problem = checkWebhookUrl(value.channel, value.url)
+      if (problem) ctx.addIssue({ code: 'custom', path: ['url'], message: problem.message })
     }
-    const host = (() => { try { return new URL(value.url).host } catch { return '' } })()
-    const hint = HOST_HINT[value.channel]
-    if (hint && !hint.pattern.test(host)) {
-      ctx.addIssue({ code: 'custom', path: ['url'], message: hint.message })
-    }
+
     if (Boolean(value.quietStart) !== Boolean(value.quietEnd)) {
       ctx.addIssue({
         code: 'custom', path: ['quietEnd'],
@@ -79,7 +56,7 @@ export function WebhookDialog({
   const isEditing = Boolean(endpoint)
 
   const {
-    register, handleSubmit, watch, reset, setError,
+    register, handleSubmit, control, reset, setError,
     formState: { errors, isSubmitting },
   } = useForm<WebhookForm>({
     resolver: zodResolver(schema),
@@ -89,7 +66,9 @@ export function WebhookDialog({
     },
   })
 
-  const channel = watch('channel')
+  // `useWatch` subscribes to one field; `watch()` returns a fresh function each
+  // render, which the compiler cannot memoize safely.
+  const channel = useWatch({ control, name: 'channel' })
 
   useEffect(() => {
     if (!open) return
@@ -183,7 +162,7 @@ export function WebhookDialog({
           label={isEditing ? 'Webhook URL (leave blank to keep the current one)' : 'Webhook URL'}
           type="url"
           autoComplete="off"
-          placeholder={HOST_HINT[channel]?.placeholder}
+          placeholder={WEBHOOK_HOSTS[channel]?.placeholder}
           hint={
             isEditing
               ? `Currently ${endpoint?.urlHint}. Paste a new URL only if it changed.`

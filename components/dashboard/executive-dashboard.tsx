@@ -1,5 +1,6 @@
 'use client'
 
+import { useNow } from '@/hooks/use-now'
 import { motion } from 'framer-motion'
 import { AlertTriangle, Activity, FlaskConical, Shield, Zap, GitBranch, ArrowRight, Clock } from 'lucide-react'
 import Link from 'next/link'
@@ -199,10 +200,11 @@ function RiskRadar() {
 }
 
 function LiveSignalsFeed() {
+  const now = useNow()
   const signals = useDashboardSnapshot().data?.liveSignals ?? []
 
   const timeAgo = (date: Date) => {
-    const diff = Math.floor((Date.now() - date.getTime()) / 60000)
+    const diff = Math.floor((now - date.getTime()) / 60000)
     if (diff < 1) return 'just now'
     if (diff < 60) return `${diff}m ago`
     return `${Math.floor(diff / 60)}h ago`
@@ -248,15 +250,11 @@ function LiveSignalsFeed() {
 }
 
 function SprintSnapshot() {
+  const now = useNow()
   const sprint = useSprints().data?.[0]
   if (!sprint) return null
   const completionPct = Math.round((sprint.completedPoints / sprint.totalPoints) * 100)
-  const daysLeft = Math.ceil((sprint.endDate.getTime() - Date.now()) / 86400000)
-
-  const issueStatuses = sprint.issues.reduce((acc, issue) => {
-    acc[issue.status] = (acc[issue.status] || 0) + 1
-    return acc
-  }, {} as Record<string, number>)
+  const daysLeft = Math.ceil((sprint.endDate.getTime() - now) / 86400000)
 
   return (
     <SectionCard

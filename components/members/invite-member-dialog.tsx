@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo } from 'react'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Send } from 'lucide-react'
@@ -50,14 +50,16 @@ export function InviteMemberDialog({
     .map((item) => ({ value: item.id, label: item.name }))
 
   const {
-    register, handleSubmit, watch, reset, setError,
+    register, handleSubmit, control, reset, setError,
     formState: { errors, isSubmitting },
   } = useForm<InviteForm>({
     resolver: zodResolver(schema),
     defaultValues: { email: '', roleId: 'developer', workspaceId: workspace?.id ?? '', teamId: '' },
   })
 
-  const selectedWorkspace = watch('workspaceId')
+  // `useWatch` subscribes to one field; `watch()` returns a fresh function each
+  // render, which the compiler cannot memoize safely.
+  const selectedWorkspace = useWatch({ control, name: 'workspaceId' })
   const teamOptions = (teams.data ?? [])
     .filter((team) => team.workspaceId === selectedWorkspace)
     .map((team) => ({ value: team.id, label: team.name }))

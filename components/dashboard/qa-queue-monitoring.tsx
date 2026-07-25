@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Clock, AlertTriangle, RefreshCw, User } from 'lucide-react'
+import { Clock, RefreshCw, User } from 'lucide-react'
 import { SectionCard, ScoreBar, PriorityBadge } from './shared'
 import { useQaQueue, useQaTesters } from '@/lib/query/hooks'
 import type { QAItem } from '@/lib/types'
@@ -21,7 +21,6 @@ function QAMetrics() {
   const inProgressCount = qaQueue.filter(i => i.status === 'In Progress').length
   const regressionCount = qaQueue.filter(i => i.status === 'Regression').length
   const unassignedCount = qaQueue.filter(i => i.assignee === 'Unassigned').length
-  const avgWait = Math.round(qaQueue.reduce((a, i) => a + i.waitingDays, 0) / qaQueue.length * 10) / 10
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">

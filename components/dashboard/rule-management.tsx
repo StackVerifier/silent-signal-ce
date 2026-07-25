@@ -1,11 +1,12 @@
 'use client'
 
+import { useNow } from '@/hooks/use-now'
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Shield, Zap, GitBranch, FlaskConical, Activity, Users,
-  ChevronDown, ChevronRight, ToggleLeft, ToggleRight,
-  Clock, AlertTriangle, Search, Filter, Plus, Check,
+  Zap, GitBranch, FlaskConical, Activity, Users,
+  ChevronRight, ToggleLeft, ToggleRight,
+  Clock, Search, Plus, Check,
   ArrowRight
 } from 'lucide-react'
 import { SectionCard, ScoreBar } from './shared'
@@ -57,20 +58,13 @@ function ConditionBadge({ type }: { type: string }) {
 function RuleSummary({ allRules }: { allRules: Rule[] }) {
   const enabled     = allRules.filter(r => r.enabled).length
   const totalTriggers = allRules.reduce((a, r) => a + r.triggeredCount, 0)
-  const byCat = Object.entries(CATEGORY_META).map(([key, meta]) => ({
-    ...meta,
-    category: key as Rule['category'],
-    count: allRules.filter(r => r.category === key).length,
-    activeCount: allRules.filter(r => r.category === key && r.enabled).length,
-  }))
-
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
       {[
         { label: 'Total Rules',    value: allRules.length, color: '#E2E8F0', sub: `${enabled} active` },
         { label: 'Active Rules',   value: enabled,         color: '#22C55E', sub: `${allRules.length - enabled} paused` },
         { label: 'Total Triggers', value: totalTriggers,   color: '#6C63FF', sub: 'all time' },
-        { label: 'Categories',     value: 5,               color: '#00D4FF', sub: 'sprint · qa · release' },
+        { label: 'Categories',     value: Object.keys(CATEGORY_META).length, color: '#00D4FF', sub: 'sprint · qa · release' },
       ].map((m, i) => (
         <motion.div
           key={m.label}
@@ -130,7 +124,7 @@ function CategoryBreakdown({ allRules }: { allRules: Rule[] }) {
 // ─── Rule Card ────────────────────────────────────────────────────────────────
 
 function RuleCard({ rule, index }: { rule: Rule; index: number }) {
-  const rules = useRules().data ?? []
+  const now = useNow()
   const [expanded, setExpanded] = useState(false)
   const [enabled, setEnabled] = useState(rule.enabled)
   const toggleRule = useToggleRule()
@@ -154,7 +148,7 @@ function RuleCard({ rule, index }: { rule: Rule; index: number }) {
   const action = ACTION_META[rule.action]
   const timeAgo = rule.lastTriggered
     ? (() => {
-        const diff = Math.floor((Date.now() - rule.lastTriggered!.getTime()) / 60000)
+        const diff = Math.floor((now - rule.lastTriggered!.getTime()) / 60000)
         if (diff < 60) return `${diff}m ago`
         if (diff < 1440) return `${Math.floor(diff / 60)}h ago`
         return `${Math.floor(diff / 1440)}d ago`
@@ -285,7 +279,6 @@ function RuleCard({ rule, index }: { rule: Rule; index: number }) {
 // ─── Rule List ────────────────────────────────────────────────────────────────
 
 function RuleList({ allRules }: { allRules: Rule[] }) {
-  const rules = useRules().data ?? []
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -383,6 +376,7 @@ function RuleList({ allRules }: { allRules: Rule[] }) {
 // ─── Trigger History ──────────────────────────────────────────────────────────
 
 function TriggerHistory({ allRules }: { allRules: Rule[] }) {
+  const now = useNow()
   const recentlyTriggered = [...allRules]
     .filter(r => r.lastTriggered)
     .sort((a, b) => b.lastTriggered!.getTime() - a.lastTriggered!.getTime())
@@ -394,7 +388,7 @@ function TriggerHistory({ allRules }: { allRules: Rule[] }) {
         {recentlyTriggered.map((rule, i) => {
           const cat = CATEGORY_META[rule.category]
           const action = ACTION_META[rule.action]
-          const diff = Math.floor((Date.now() - rule.lastTriggered!.getTime()) / 60000)
+          const diff = Math.floor((now - rule.lastTriggered!.getTime()) / 60000)
           const ago = diff < 60 ? `${diff}m` : diff < 1440 ? `${Math.floor(diff / 60)}h` : `${Math.floor(diff / 1440)}d`
           return (
             <motion.div
@@ -434,7 +428,6 @@ function TriggerHistory({ allRules }: { allRules: Rule[] }) {
 // ─── Score Impact Breakdown ───────────────────────────────────────────────────
 
 function ScoreImpactChart({ allRules }: { allRules: Rule[] }) {
-  const rules = useRules().data ?? []
   const sorted = [...allRules]
     .filter(r => r.enabled)
     .sort((a, b) => b.scoreImpact - a.scoreImpact)

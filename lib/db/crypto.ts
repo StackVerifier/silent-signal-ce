@@ -74,7 +74,9 @@ export function encryptSecret(plaintext: string): string {
 
 export function decryptSecret(payload: string): string {
   const [version, ivB64, tagB64, dataB64] = payload.split(':')
-  if (version !== 'v1' || !ivB64 || !tagB64 || !dataB64) {
+  // The ciphertext of an empty string is empty, which is well-formed — testing
+  // it for truthiness would make an empty secret unreadable after storage.
+  if (version !== 'v1' || !ivB64 || !tagB64 || dataB64 === undefined) {
     throw new Error('Malformed encrypted value')
   }
   const decipher = createDecipheriv('aes-256-gcm', loadKey(), Buffer.from(ivB64, 'base64'))

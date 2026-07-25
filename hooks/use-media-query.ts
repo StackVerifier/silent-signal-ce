@@ -1,24 +1,28 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useSyncExternalStore } from 'react'
 
 /**
- * SSR-safe media query. Starts at `defaultValue` so the server render is
- * deterministic, then syncs on mount — layout must not depend on this before
- * hydration, only behaviour.
+ * SSR-safe media query. The server snapshot is `defaultValue` so the markup is
+ * deterministic; the client reads the real value during render rather than
+ * syncing it in afterwards. Layout must not depend on this before hydration,
+ * only behaviour.
  */
 export function useMediaQuery(query: string, defaultValue = false): boolean {
-  const [matches, setMatches] = useState(defaultValue)
+  const subscribe = useCallback(
+    (listener: () => void) => {
+      const list = window.matchMedia(query)
+      list.addEventListener('change', listener)
+      return () => list.removeEventListener('change', listener)
+    },
+    [query],
+  )
 
-  useEffect(() => {
-    const list = window.matchMedia(query)
-    setMatches(list.matches)
-    const onChange = (event: MediaQueryListEvent) => setMatches(event.matches)
-    list.addEventListener('change', onChange)
-    return () => list.removeEventListener('change', onChange)
-  }, [query])
-
-  return matches
+  return useSyncExternalStore(
+    subscribe,
+    () => window.matchMedia(query).matches,
+    () => defaultValue,
+  )
 }
 
 /** Tailwind `lg` breakpoint — the point where the sidebar stops being a drawer. */

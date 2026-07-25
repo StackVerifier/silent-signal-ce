@@ -7,7 +7,7 @@ import { PermissionGuard } from '@/components/rbac/permission-guard'
 import { EmptyState, ErrorState } from '@/components/states/data-states'
 import { PERMISSIONS } from '@/lib/rbac/permissions'
 import { motion } from 'framer-motion'
-import { FileText, User, Database } from 'lucide-react'
+import { FileText, User } from 'lucide-react'
 
 const ACTION_LABELS: Record<string, string> = {
   create: 'Created',
