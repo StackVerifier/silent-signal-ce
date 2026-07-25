@@ -8,6 +8,9 @@ import { env } from '@/lib/env'
  * (Jira and Slack both rate-limit with it).
  */
 
+/** Fired when a request finds the session gone. See `RequireSession`. */
+export const SESSION_LOST_EVENT = 'silent-signal:session-lost'
+
 export class ApiError extends Error {
   readonly status: number
   readonly code: string
@@ -138,6 +141,15 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
         },
         body: body === undefined ? undefined : JSON.stringify(body),
       })
+
+      if (response.status === 401 && path !== '/api/session') {
+        // The session went away while the application was open — expired, or
+        // signed out in another tab. Announcing it lets the auth provider drop
+        // its state so the session guard can send the user to the login page,
+        // instead of every panel quietly rendering as empty. The login request
+        // itself is excluded: a wrong password is not a lost session.
+        window.dispatchEvent(new Event(SESSION_LOST_EVENT))
+      }
 
       if (!response.ok) {
         const retryAfter = response.headers.get('Retry-After')
