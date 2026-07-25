@@ -1,17 +1,44 @@
-# v0 sandbox internal files
+# ─── Secrets ──────────────────────────────────────────────────────────────────
+# Ignore every env file, then re-allow the committed templates.
+# The previous `.env*.local` pattern did NOT cover a plain `.env`, which is
+# exactly where real Jira/Slack credentials end up.
+.env
+.env.*
+!.env.example
+!.env.test.example
+*.pem
+*.key
+secrets/
+
+# ─── Dependencies & build output ──────────────────────────────────────────────
+node_modules
+.pnpm-store/
+.next/
+out/
+build/
+dist/
+tsconfig.tsbuildinfo
+*.tsbuildinfo
+.turbo/
+
+# ─── Tooling caches ───────────────────────────────────────────────────────────
+.eslintcache
+coverage/
+playwright-report/
+test-results/
+.vercel/
+
+# ─── v0 sandbox internal files ────────────────────────────────────────────────
 __v0_runtime_loader.js
 __v0_devtools.tsx
 __v0_jsx-dev-runtime.ts
 .snowflake/
 .v0-trash/
-.vercel/
 
-# Environment variables
-.env*.local
-
-# Common ignores
-node_modules
-.next/
+# ─── OS / editor ──────────────────────────────────────────────────────────────
 .DS_Store
-# Build artifacts
-tsconfig.tsbuildinfo
+Thumbs.db
+*.swp
+.idea/
+.vscode/*
+!.vscode/extensions.json
