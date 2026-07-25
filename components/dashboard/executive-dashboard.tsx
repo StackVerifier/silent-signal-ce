@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { RiskCard } from './risk-card'
 import { SectionCard, ScoreBar, SeverityDot } from './shared'
 import { MetricInfo } from '@/components/ui/tooltip'
+import { ActivityFeed } from './activity-feed'
 import {
   dashboardMetrics, serviceHealth, liveSignals, releases, sprints
 } from '@/lib/mock-data'
@@ -445,8 +446,11 @@ export function ExecutiveDashboard() {
           </div>
         </div>
 
-        {/* Risk Radar */}
-        <RiskRadar />
+        {/* Right column: radar + workspace activity */}
+        <div className="space-y-4">
+          <RiskRadar />
+          <ActivityFeed limit={6} />
+        </div>
       </div>
 
       {/* Bottom row: Sprint + Release + Live Signals */}

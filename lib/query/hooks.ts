@@ -261,6 +261,47 @@ export function useNotificationRoutes() {
   })
 }
 
+/** Optimistic: marking read must feel instant, and the badge is derived state. */
+export function useMarkNotificationRead() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (notificationId: string) => notificationService.markRead(notificationId),
+    onMutate: async (notificationId) => {
+      const key = queryKeys.notifications()
+      await queryClient.cancelQueries({ queryKey: key })
+      const previous = queryClient.getQueryData(key)
+      queryClient.setQueryData(key, (current: { id: string; read: boolean }[] | undefined) =>
+        current?.map((item) => (item.id === notificationId ? { ...item, read: true } : item)),
+      )
+      return { previous, key }
+    },
+    onError: (_error, _variables, context) => {
+      if (context) queryClient.setQueryData(context.key, context.previous)
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.notifications() }),
+  })
+}
+
+export function useMarkAllNotificationsRead() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => notificationService.markAllRead(),
+    onMutate: async () => {
+      const key = queryKeys.notifications()
+      await queryClient.cancelQueries({ queryKey: key })
+      const previous = queryClient.getQueryData(key)
+      queryClient.setQueryData(key, (current: { read: boolean }[] | undefined) =>
+        current?.map((item) => ({ ...item, read: true })),
+      )
+      return { previous, key }
+    },
+    onError: (_error, _variables, context) => {
+      if (context) queryClient.setQueryData(context.key, context.previous)
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.notifications() }),
+  })
+}
+
 export function useSaveNotificationRoute() {
   const queryClient = useQueryClient()
   const { workspace } = useAuth()

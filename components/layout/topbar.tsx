@@ -1,11 +1,11 @@
 'use client'
 
-import { Bell, RefreshCw, Wifi, Menu } from 'lucide-react'
+import { RefreshCw, Wifi, Menu } from 'lucide-react'
 import { useDashboardStore } from '@/store/dashboard-store'
 import { useAuth } from '@/lib/auth-context'
-import { useEffect, useRef, useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useEffect, useState } from 'react'
 import { Breadcrumb } from './breadcrumb'
+import { NotificationCenter } from '@/components/notifications/notification-center'
 
 function useRelativeTime(date: Date) {
   const [label, setLabel] = useState('')
@@ -26,17 +26,11 @@ function useRelativeTime(date: Date) {
 
 export function Topbar({ title, trailing }: { title: string; trailing?: string }) {
   const metrics = useDashboardStore((state) => state.metrics)
-  const liveSignals = useDashboardStore((state) => state.liveSignals)
   const simulateUpdate = useDashboardStore((state) => state.simulateUpdate)
   const { isGated } = useAuth()
   const syncLabel = useRelativeTime(metrics.lastSyncAt)
   const [syncing, setSyncing] = useState(false)
-  const [notifOpen, setNotifOpen] = useState(false)
   const setMobileNavOpen = useDashboardStore((state) => state.setMobileNavOpen)
-  const notifRef = useRef<HTMLDivElement>(null)
-  const criticalSignals = isGated
-    ? []
-    : liveSignals.filter(s => s.severity === 'critical' || s.severity === 'high')
 
   const handleSync = () => {
     setSyncing(true)
@@ -52,22 +46,6 @@ export function Topbar({ title, trailing }: { title: string; trailing?: string }
     return () => clearInterval(interval)
   }, [simulateUpdate])
 
-  // Dismiss the notification panel on outside click or Escape.
-  useEffect(() => {
-    if (!notifOpen) return
-    const onPointerDown = (event: MouseEvent) => {
-      if (!notifRef.current?.contains(event.target as Node)) setNotifOpen(false)
-    }
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setNotifOpen(false)
-    }
-    document.addEventListener('mousedown', onPointerDown)
-    document.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown)
-      document.removeEventListener('keydown', onKeyDown)
-    }
-  }, [notifOpen])
 
   return (
     <header className="h-14 flex items-center justify-between gap-3 px-4 sm:px-6 border-b border-[#1E2D4A] bg-[#070B18]/80 backdrop-blur-sm flex-shrink-0 sticky top-0 z-10">
@@ -118,60 +96,7 @@ export function Topbar({ title, trailing }: { title: string; trailing?: string }
           <span className="hidden sm:inline">Sync</span>
         </button>
 
-        {/* Notifications */}
-        <div className="relative" ref={notifRef}>
-          <button
-            onClick={() => setNotifOpen(!notifOpen)}
-            className="relative flex items-center justify-center w-11 h-11 sm:w-8 sm:h-8 rounded-lg hover:bg-[#151D32] text-[#64748B] hover:text-[#94A3B8] transition-colors"
-            aria-label={`Notifications${criticalSignals.length ? `, ${criticalSignals.length} active` : ''}`}
-            aria-expanded={notifOpen}
-          >
-            <Bell className="w-4 h-4" />
-            {criticalSignals.length > 0 && (
-              <span className="absolute top-1 right-1 w-2 h-2 bg-[#EF4444] rounded-full border border-[#070B18]" />
-            )}
-          </button>
-
-          <AnimatePresence>
-            {notifOpen && (
-              <motion.div
-                initial={{ opacity: 0, y: 8, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 8, scale: 0.95 }}
-                transition={{ duration: 0.15 }}
-                className="absolute right-0 top-10 w-[min(20rem,calc(100vw-2rem))] bg-[#111827] border border-[#1E2D4A] rounded-xl shadow-2xl overflow-hidden z-50"
-              >
-                <div className="px-4 py-3 border-b border-[#1E2D4A] flex items-center justify-between">
-                  <span className="text-sm font-semibold text-[#E2E8F0]">Active Signals</span>
-                  <span className="text-xs text-[#64748B]">{criticalSignals.length} alerts</span>
-                </div>
-                <div className="max-h-64 overflow-y-auto no-scrollbar">
-                  {criticalSignals.length === 0 && (
-                    <p className="px-4 py-8 text-center text-xs text-[#64748B]">
-                      {isGated ? 'Signals unlock once your account is approved.' : 'No active signals right now.'}
-                    </p>
-                  )}
-                  {criticalSignals.slice(0, 5).map(s => (
-                    <div key={s.id} className="px-4 py-3 border-b border-[#1E2D4A]/50 hover:bg-[#151D32] transition-colors">
-                      <div className="flex items-start gap-2">
-                        <span className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${s.severity === 'critical' ? 'bg-[#EF4444]' : 'bg-[#F59E0B]'}`} />
-                        <div>
-                          <p className="text-xs font-medium text-[#E2E8F0]">{s.issueKey}</p>
-                          <p className="text-xs text-[#64748B] mt-0.5 leading-relaxed">{s.message}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="px-4 py-3 text-center">
-                  <button className="text-xs text-[#6C63FF] hover:text-[#8B85FF] transition-colors">
-                    View all signals
-                  </button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+        <NotificationCenter />
 
       </div>
     </header>
