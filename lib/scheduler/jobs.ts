@@ -88,7 +88,7 @@ export const JOBS: JobDefinition[] = [
     maxAttempts: 1,
     handler: async () => {
       const { invitationRepo } = await import('@/lib/db/repositories')
-      const expired = invitationRepo.expireOverdue()
+      const expired = await invitationRepo.expireOverdue()
       return { summary: `Expired ${expired} invitation(s)`, metrics: { expired } }
     },
   },

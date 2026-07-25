@@ -5,9 +5,9 @@ import { PERMISSIONS } from '@/lib/rbac/permissions'
 
 export const dynamic = 'force-dynamic'
 
-export const GET = route({ permission: PERMISSIONS.TEAMS_READ }, (context, request) => {
+export const GET = route({ permission: PERMISSIONS.TEAMS_READ }, async (context, request) => {
   const workspaceId = new URL(request.url).searchParams.get('workspaceId') ?? undefined
-  return teamRepo.list(context.organizationId, workspaceId)
+  return await teamRepo.list(context.organizationId, workspaceId)
 })
 
 const createSchema = z.object({
@@ -20,5 +20,5 @@ const createSchema = z.object({
 
 export const POST = route({ permission: PERMISSIONS.TEAMS_WRITE }, async (context, request) => {
   const input = await parseBody(request, createSchema)
-  return teamRepo.create({ ...input, organizationId: context.organizationId }, context.memberId)
+  return await teamRepo.create({ ...input, organizationId: context.organizationId }, context.memberId)
 })

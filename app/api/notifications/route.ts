@@ -4,11 +4,11 @@ import { PERMISSIONS } from '@/lib/rbac/permissions'
 
 export const dynamic = 'force-dynamic'
 
-export const GET = route({ permission: PERMISSIONS.NOTIFICATIONS_READ }, (context) =>
-  notificationRepo.listForMember(context.memberId))
+export const GET = route({ permission: PERMISSIONS.NOTIFICATIONS_READ }, async (context) =>
+  await notificationRepo.listForMember(context.memberId))
 
 // Mark-all-read; a single notification uses /api/notifications/[id].
-export const POST = route({ permission: PERMISSIONS.NOTIFICATIONS_READ }, (context) => {
-  notificationRepo.markAllRead(context.memberId)
+export const POST = route({ permission: PERMISSIONS.NOTIFICATIONS_READ }, async (context) => {
+  await notificationRepo.markAllRead(context.memberId)
   return { ok: true }
 })

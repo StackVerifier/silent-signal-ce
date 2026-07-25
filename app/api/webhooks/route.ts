@@ -5,8 +5,8 @@ import { PERMISSIONS } from '@/lib/rbac/permissions'
 
 export const dynamic = 'force-dynamic'
 
-export const GET = route({ permission: PERMISSIONS.NOTIFICATIONS_READ }, (context) =>
-  webhookRepo.list(context.workspaceId))
+export const GET = route({ permission: PERMISSIONS.NOTIFICATIONS_READ }, async (context) =>
+  await webhookRepo.list(context.workspaceId))
 
 const quietHoursSchema = z
   .object({
@@ -56,7 +56,7 @@ const createSchema = z.object({
 
 export const POST = route({ permission: PERMISSIONS.NOTIFICATIONS_WRITE }, async (context, request) => {
   const input = await parseBody(request, createSchema)
-  return webhookRepo.create(
+  return await webhookRepo.create(
     {
       workspaceId: context.workspaceId,
       organizationId: context.organizationId,

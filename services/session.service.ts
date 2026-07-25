@@ -21,4 +21,10 @@ export const sessionService = {
     request<SessionPayload>('/api/session', { method: 'PATCH', body: { workspaceId } }),
 
   logout: () => request<void>('/api/session', { method: 'DELETE' }),
+
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<{ ok: true }>('/api/session/password', {
+      method: 'POST',
+      body: { currentPassword, newPassword },
+    }),
 }

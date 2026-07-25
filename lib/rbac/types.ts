@@ -105,6 +105,8 @@ export interface Member {
   approvedById?: string
   approvedAt?: Date
   lastActiveAt?: Date
+  /** True while the account still uses a handed-out password. */
+  mustChangePassword?: boolean
   createdAt: Date
 }
 

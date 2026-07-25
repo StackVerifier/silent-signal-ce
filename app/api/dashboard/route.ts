@@ -5,7 +5,7 @@ import type { DashboardMetrics, LiveSignal, ServiceHealth } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 
-export const GET = route({ permission: PERMISSIONS.DASHBOARD_READ }, (context) => ({
+export const GET = route({ permission: PERMISSIONS.DASHBOARD_READ }, async (context) => ({
   metrics: deliveryRepo.metrics<DashboardMetrics>(context.workspaceId),
   serviceHealth: deliveryRepo.serviceHealth<ServiceHealth>(context.workspaceId),
   liveSignals: deliveryRepo.signals<LiveSignal>(context.workspaceId, 'live'),

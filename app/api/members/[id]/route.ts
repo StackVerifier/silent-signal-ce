@@ -20,7 +20,7 @@ export const POST = route({ permission: PERMISSIONS.MEMBERS_READ }, async (conte
   const { action } = await parseBody(request, actionSchema)
   const memberId = new URL(request.url).pathname.split('/').pop()!
 
-  const target = memberRepo.get(memberId)
+  const target = await memberRepo.get(memberId)
   if (!target || target.organizationId !== context.organizationId) {
     // Cross-organization access must not confirm the member exists.
     throw Object.assign(new Error('Member not found'), { statusCode: 404 })
@@ -39,8 +39,8 @@ export const POST = route({ permission: PERMISSIONS.MEMBERS_READ }, async (conte
   }
 
   if (action === 'remove') {
-    memberRepo.remove(memberId, context.memberId)
+    await memberRepo.remove(memberId, context.memberId)
     return { ok: true }
   }
-  return memberRepo.setStatus(memberId, STATUS_BY_ACTION[action], context.memberId)
+  return await memberRepo.setStatus(memberId, STATUS_BY_ACTION[action], context.memberId)
 })

@@ -11,15 +11,15 @@ export const POST = route({ permission: PERMISSIONS.MEMBERS_INVITE }, async (con
   const { action } = await parseBody(request, actionSchema)
   const invitationId = new URL(request.url).pathname.split('/').pop()!
 
-  const invitation = invitationRepo.list(context.organizationId)
+  const invitation = (await invitationRepo.list(context.organizationId))
     .find((item) => item.id === invitationId)
   if (!invitation) throw Object.assign(new Error('Invitation not found'), { statusCode: 404 })
 
   if (action === 'cancel') {
-    invitationRepo.cancel(invitationId, context.memberId)
+    await invitationRepo.cancel(invitationId, context.memberId)
   } else {
-    const organization = orgRepo.get(context.organizationId)
-    invitationRepo.resend(
+    const organization = await orgRepo.get(context.organizationId)
+    await invitationRepo.resend(
       invitationId, context.memberId, organization?.settings.invitationExpiryDays ?? 7,
     )
   }

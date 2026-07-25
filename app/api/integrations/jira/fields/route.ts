@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { parseBody, route } from '@/lib/api/handler'
-import { appDb } from '@/lib/db/app'
+import { all, run } from '@/lib/db/driver'
 import { PERMISSIONS } from '@/lib/rbac/permissions'
 
 export const dynamic = 'force-dynamic'
@@ -8,16 +8,16 @@ export const dynamic = 'force-dynamic'
 const EMPTY = { storyPoints: null, sprint: null, severity: null, qaStatus: null }
 
 /** Stored in the integration's config blob; it is configuration, not a secret. */
-function readMapping(workspaceId: string) {
-  const row = appDb()
-    .prepare("SELECT config FROM integration WHERE workspace_id = ? AND type = 'jira'")
-    .get(workspaceId) as { config: string } | undefined
-  if (!row) return EMPTY
-  const config = JSON.parse(row.config || '{}')
+async function readMapping(workspaceId: string) {
+  const rows = await all<{ config: string }>(
+    "SELECT config FROM integration WHERE workspace_id = ? AND type = 'jira'", workspaceId,
+  )
+  if (rows.length === 0) return EMPTY
+  const config = JSON.parse(rows[0].config || '{}')
   return { ...EMPTY, ...(config.fieldMapping ?? {}) }
 }
 
-export const GET = route({ permission: PERMISSIONS.INTEGRATION_READ }, (context) =>
+export const GET = route({ permission: PERMISSIONS.INTEGRATION_READ }, async (context) =>
   readMapping(context.workspaceId))
 
 const mappingSchema = z.object({
@@ -29,14 +29,13 @@ const mappingSchema = z.object({
 
 export const PUT = route({ permission: PERMISSIONS.INTEGRATION_WRITE }, async (context, request) => {
   const mapping = await parseBody(request, mappingSchema)
-  const db = appDb()
-  const row = db
-    .prepare("SELECT config FROM integration WHERE workspace_id = ? AND type = 'jira'")
-    .get(context.workspaceId) as { config: string } | undefined
-
-  const config = { ...JSON.parse(row?.config || '{}'), fieldMapping: mapping }
-  db.prepare("UPDATE integration SET config = ? WHERE workspace_id = ? AND type = 'jira'")
-    .run(JSON.stringify(config), context.workspaceId)
-
+  const rows = await all<{ config: string }>(
+    "SELECT config FROM integration WHERE workspace_id = ? AND type = 'jira'", context.workspaceId,
+  )
+  const config = { ...JSON.parse(rows[0]?.config || '{}'), fieldMapping: mapping }
+  await run(
+    "UPDATE integration SET config = ? WHERE workspace_id = ? AND type = 'jira'",
+    JSON.stringify(config), context.workspaceId,
+  )
   return mapping
 })

@@ -7,8 +7,8 @@ import type { RoleId } from '@/lib/rbac/types'
 
 export const dynamic = 'force-dynamic'
 
-export const GET = route({ permission: PERMISSIONS.MEMBERS_READ }, (context) =>
-  invitationRepo.list(context.organizationId))
+export const GET = route({ permission: PERMISSIONS.MEMBERS_READ }, async (context) =>
+  await invitationRepo.list(context.organizationId))
 
 const inviteSchema = z.object({
   email: z.string().email('Enter a valid email address'),
@@ -27,8 +27,8 @@ export const POST = route({ permission: PERMISSIONS.MEMBERS_INVITE }, async (con
     return jsonError('You cannot assign that role', 403, 'role_tier')
   }
 
-  const organization = orgRepo.get(context.organizationId)
-  return invitationRepo.create(
+  const organization = await orgRepo.get(context.organizationId)
+  return await invitationRepo.create(
     {
       organizationId: context.organizationId,
       email: input.email,

@@ -4,7 +4,7 @@ import { PERMISSIONS } from '@/lib/rbac/permissions'
 
 export const dynamic = 'force-dynamic'
 
-export const GET = route({ permission: PERMISSIONS.MEMBERS_READ }, (context) => ({
-  data: memberRepo.list(context.organizationId),
+export const GET = route({ permission: PERMISSIONS.MEMBERS_READ }, async (context) => ({
+  data: await memberRepo.list(context.organizationId),
   pageInfo: { nextCursor: null, hasMore: false },
 }))

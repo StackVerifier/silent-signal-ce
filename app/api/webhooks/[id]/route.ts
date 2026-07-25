@@ -14,8 +14,8 @@ const idOf = (request: Request) => {
     : segments[segments.length - 1]
 }
 
-function assertOwned(workspaceId: string, webhookId: string) {
-  const found = webhookRepo.list(workspaceId).find((item) => item.id === webhookId)
+async function assertOwned(workspaceId: string, webhookId: string) {
+  const found = (await webhookRepo.list(workspaceId)).find((item) => item.id === webhookId)
   // A webhook from another workspace is reported as missing, not forbidden.
   if (!found) throw Object.assign(new Error('Webhook not found'), { statusCode: 404 })
   return found
@@ -36,26 +36,26 @@ const patchSchema = z.object({
 
 export const PATCH = route({ permission: PERMISSIONS.NOTIFICATIONS_WRITE }, async (context, request) => {
   const id = idOf(request)
-  assertOwned(context.workspaceId, id)
+  await assertOwned(context.workspaceId, id)
   const patch = await parseBody(request, patchSchema)
-  return webhookRepo.update(id, patch, context.memberId, context.organizationId)
+  return await webhookRepo.update(id, patch, context.memberId, context.organizationId)
 })
 
-export const DELETE = route({ permission: PERMISSIONS.NOTIFICATIONS_WRITE }, (context, request) => {
+export const DELETE = route({ permission: PERMISSIONS.NOTIFICATIONS_WRITE }, async (context, request) => {
   const id = idOf(request)
-  assertOwned(context.workspaceId, id)
-  webhookRepo.remove(id, context.memberId, context.organizationId)
+  await assertOwned(context.workspaceId, id)
+  await webhookRepo.remove(id, context.memberId, context.organizationId)
   return { ok: true }
 })
 
 /** Sends a real test message, so wiring is proven before an incident tests it. */
 export const POST = route({ permission: PERMISSIONS.NOTIFICATIONS_WRITE }, async (context, request) => {
   const id = idOf(request)
-  const endpoint = assertOwned(context.workspaceId, id)
+  const endpoint = await assertOwned(context.workspaceId, id)
 
-  const url = webhookRepo.getUrl(id)
+  const url = await webhookRepo.getUrl(id)
   if (!url) {
-    webhookRepo.recordTest(id, false, 'Stored URL could not be decrypted')
+    await webhookRepo.recordTest(id, false, 'Stored URL could not be decrypted')
     return jsonError('Stored URL could not be decrypted — re-enter it', 409, 'decrypt_failed')
   }
 
@@ -65,6 +65,6 @@ export const POST = route({ permission: PERMISSIONS.NOTIFICATIONS_WRITE }, async
     message: `If you can read this, ${endpoint.label} is wired correctly.`,
   })
 
-  webhookRepo.recordTest(id, result.ok, result.error)
+  await webhookRepo.recordTest(id, result.ok, result.error)
   return { ok: result.ok, error: result.error ?? null }
 })

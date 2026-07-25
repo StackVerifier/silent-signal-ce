@@ -1,3 +1,10 @@
+-- Application schema, Postgres dialect.
+--
+-- Mirrors db/app-schema.sql. The differences are only the ones Postgres
+-- requires: real BOOLEAN and TIMESTAMPTZ instead of SQLite's INTEGER/TEXT, and
+-- BIGSERIAL for the audit id. Table and column names are identical, so the
+-- repositories issue the same SQL against either driver.
+
 -- Application database.
 --
 -- Unlike data/help.db (read-only content), this one is written at runtime.
@@ -10,9 +17,9 @@
 -- as JSON columns. Modelling them relationally now would be premature: Jira
 -- owns their shape, and nothing queries into them.
 
-PRAGMA journal_mode = WAL;      -- Concurrent reads during a write.
-PRAGMA foreign_keys = ON;
-PRAGMA busy_timeout = 5000;
+
+
+
 
 CREATE TABLE IF NOT EXISTS organization (
   id                TEXT PRIMARY KEY,
@@ -20,11 +27,11 @@ CREATE TABLE IF NOT EXISTS organization (
   slug              TEXT NOT NULL UNIQUE,
   logo              TEXT,
   plan              TEXT NOT NULL DEFAULT 'free',
-  sso_enabled       INTEGER NOT NULL DEFAULT 0,
+  sso_enabled       BOOLEAN NOT NULL DEFAULT FALSE,
   sso_provider      TEXT,
   verified_domains  TEXT NOT NULL DEFAULT '[]',
   settings          TEXT NOT NULL DEFAULT '{}',
-  created_at        TEXT NOT NULL
+  created_at        TIMESTAMPTZ NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS workspace (
@@ -35,9 +42,9 @@ CREATE TABLE IF NOT EXISTS workspace (
   description      TEXT,
   status           TEXT NOT NULL DEFAULT 'active',
   integration_ids  TEXT NOT NULL DEFAULT '[]',
-  created_at       TEXT NOT NULL,
-  updated_at       TEXT NOT NULL,
-  archived_at      TEXT,
+  created_at       TIMESTAMPTZ NOT NULL,
+  updated_at       TIMESTAMPTZ NOT NULL,
+  archived_at      TIMESTAMPTZ,
   UNIQUE (organization_id, slug)
 );
 
@@ -50,18 +57,18 @@ CREATE TABLE IF NOT EXISTS member (
   avatar             TEXT,
   role_id            TEXT NOT NULL,
   status             TEXT NOT NULL DEFAULT 'pending',
-  email_verified_at  TEXT,
+  email_verified_at  TIMESTAMPTZ,
   invited_by_id      TEXT,
-  invited_at         TEXT,
+  invited_at         TIMESTAMPTZ,
   approved_by_id     TEXT,
-  approved_at        TEXT,
-  last_active_at     TEXT,
+  approved_at        TIMESTAMPTZ,
+  last_active_at     TIMESTAMPTZ,
   password_hash      TEXT,
   -- Set when an account is created with a handed-out password, so the app can
   -- insist on a real one before it is used for anything.
-  must_change_password INTEGER NOT NULL DEFAULT 0,
-  password_changed_at TEXT,
-  created_at         TEXT NOT NULL,
+  must_change_password BOOLEAN NOT NULL DEFAULT FALSE,
+  password_changed_at TIMESTAMPTZ,
+  created_at         TIMESTAMPTZ NOT NULL,
   UNIQUE (organization_id, email)
 );
 
@@ -75,7 +82,7 @@ CREATE TABLE IF NOT EXISTS team (
   description         TEXT,
   release_manager_id  TEXT REFERENCES member(id) ON DELETE SET NULL,
   qa_lead_id          TEXT REFERENCES member(id) ON DELETE SET NULL,
-  created_at          TEXT NOT NULL,
+  created_at          TIMESTAMPTZ NOT NULL,
   UNIQUE (workspace_id, name)
 );
 
@@ -104,10 +111,10 @@ CREATE TABLE IF NOT EXISTS invitation (
   status           TEXT NOT NULL DEFAULT 'pending',
   token_hash       TEXT NOT NULL,
   invited_by_id    TEXT NOT NULL,
-  invited_at       TEXT NOT NULL,
-  expires_at       TEXT NOT NULL,
-  accepted_at      TEXT,
-  resent_at        TEXT,
+  invited_at       TIMESTAMPTZ NOT NULL,
+  expires_at       TIMESTAMPTZ NOT NULL,
+  accepted_at      TIMESTAMPTZ,
+  resent_at        TIMESTAMPTZ,
   resend_count     INTEGER NOT NULL DEFAULT 0
 );
 
@@ -120,10 +127,10 @@ CREATE TABLE IF NOT EXISTS integration (
   workspace_id  TEXT NOT NULL REFERENCES workspace(id) ON DELETE CASCADE,
   type          TEXT NOT NULL,
   name          TEXT NOT NULL,
-  enabled       INTEGER NOT NULL DEFAULT 0,
+  enabled       BOOLEAN NOT NULL DEFAULT FALSE,
   config        TEXT NOT NULL DEFAULT '{}',
-  last_sync_at  TEXT,
-  created_at    TEXT NOT NULL,
+  last_sync_at  TIMESTAMPTZ,
+  created_at    TIMESTAMPTZ NOT NULL,
   UNIQUE (workspace_id, type)
 );
 
@@ -140,14 +147,14 @@ CREATE TABLE IF NOT EXISTS webhook_endpoint (
   url_encrypted  TEXT NOT NULL,
   url_hint       TEXT NOT NULL,
   minimum_level  TEXT NOT NULL DEFAULT 'high',
-  enabled        INTEGER NOT NULL DEFAULT 1,
+  enabled        BOOLEAN NOT NULL DEFAULT TRUE,
   quiet_hours    TEXT,                   -- JSON {start,end,timezone} or NULL
   last_status    TEXT,                   -- ok | failed | untested
   last_error     TEXT,
-  last_tested_at TEXT,
+  last_tested_at TIMESTAMPTZ,
   created_by_id  TEXT,
-  created_at     TEXT NOT NULL,
-  updated_at     TEXT NOT NULL
+  created_at     TIMESTAMPTZ NOT NULL,
+  updated_at     TIMESTAMPTZ NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_webhook_workspace ON webhook_endpoint(workspace_id, enabled);
@@ -161,15 +168,15 @@ CREATE TABLE IF NOT EXISTS notification (
   title         TEXT NOT NULL,
   message       TEXT NOT NULL,
   link          TEXT,
-  read          INTEGER NOT NULL DEFAULT 0,
-  created_at    TEXT NOT NULL
+  read          BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at    TIMESTAMPTZ NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_notification_member
   ON notification(member_id, read, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS audit_log (
-  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  id               BIGSERIAL PRIMARY KEY,
   organization_id  TEXT NOT NULL REFERENCES organization(id) ON DELETE CASCADE,
   workspace_id     TEXT,
   actor_id         TEXT,
@@ -181,7 +188,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
   resource_id      TEXT,
   changes          TEXT,
   metadata         TEXT,
-  created_at       TEXT NOT NULL
+  created_at       TIMESTAMPTZ NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_audit_org_time ON audit_log(organization_id, created_at DESC);
@@ -194,8 +201,8 @@ CREATE TABLE IF NOT EXISTS sprint (
   workspace_id  TEXT NOT NULL REFERENCES workspace(id) ON DELETE CASCADE,
   name          TEXT NOT NULL,
   team          TEXT NOT NULL,
-  start_date    TEXT NOT NULL,
-  end_date      TEXT NOT NULL,
+  start_date    TIMESTAMPTZ NOT NULL,
+  end_date      TIMESTAMPTZ NOT NULL,
   payload       TEXT NOT NULL           -- full Sprint aggregate as JSON
 );
 
@@ -204,7 +211,7 @@ CREATE TABLE IF NOT EXISTS release (
   workspace_id  TEXT NOT NULL REFERENCES workspace(id) ON DELETE CASCADE,
   name          TEXT NOT NULL,
   version       TEXT NOT NULL,
-  target_date   TEXT NOT NULL,
+  target_date   TIMESTAMPTZ NOT NULL,
   payload       TEXT NOT NULL
 );
 
@@ -226,7 +233,7 @@ CREATE TABLE IF NOT EXISTS rule (
   workspace_id     TEXT NOT NULL REFERENCES workspace(id) ON DELETE CASCADE,
   name             TEXT NOT NULL,
   category         TEXT NOT NULL,
-  enabled          INTEGER NOT NULL DEFAULT 1,
+  enabled          BOOLEAN NOT NULL DEFAULT TRUE,
   action           TEXT NOT NULL,
   score_impact     INTEGER NOT NULL DEFAULT 0,
   description      TEXT NOT NULL,
@@ -240,7 +247,7 @@ CREATE INDEX IF NOT EXISTS idx_rule_workspace ON rule(workspace_id, enabled);
 CREATE TABLE IF NOT EXISTS risk_event (
   id            TEXT PRIMARY KEY,
   workspace_id  TEXT NOT NULL REFERENCES workspace(id) ON DELETE CASCADE,
-  occurred_at   TEXT NOT NULL,
+  occurred_at   TIMESTAMPTZ NOT NULL,
   payload       TEXT NOT NULL
 );
 
@@ -263,7 +270,7 @@ CREATE TABLE IF NOT EXISTS service_health (
 CREATE TABLE IF NOT EXISTS dashboard_metrics (
   workspace_id  TEXT PRIMARY KEY REFERENCES workspace(id) ON DELETE CASCADE,
   payload       TEXT NOT NULL,
-  updated_at    TEXT NOT NULL
+  updated_at    TIMESTAMPTZ NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS billing (

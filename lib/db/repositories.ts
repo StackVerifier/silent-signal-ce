@@ -1,5 +1,5 @@
 import 'server-only'
-import { all, fromBit, newId, nowIso, one, run, toBit, toDate, transaction } from './app'
+import { all, fromBit, newId, nowIso, one, run, toBit, toDate, transaction } from './driver'
 import { decryptSecret, encryptSecret, maskUrl } from './crypto'
 import type {
   AccountStatus, Invitation, InvitationStatus, Member, Organization, RoleId, Team, Workspace,
@@ -15,10 +15,12 @@ interface MemberRow {
   avatar: string | null; role_id: string; status: string
   email_verified_at: string | null; invited_by_id: string | null; invited_at: string | null
   approved_by_id: string | null; approved_at: string | null; last_active_at: string | null
+  password_hash: string | null; must_change_password: number | boolean
+  password_changed_at: string | null
   created_at: string
 }
 
-function hydrateMember(row: MemberRow): Member {
+async function hydrateMember(row: MemberRow): Promise<Member> {
   return {
     id: row.id,
     organizationId: row.organization_id,
@@ -28,18 +30,19 @@ function hydrateMember(row: MemberRow): Member {
     avatar: row.avatar ?? undefined,
     roleId: row.role_id as RoleId,
     status: row.status as AccountStatus,
-    workspaceIds: all<{ workspace_id: string }>(
+    workspaceIds: (await all<{ workspace_id: string }>(
       'SELECT workspace_id FROM member_workspace WHERE member_id = ?', row.id,
-    ).map((item) => item.workspace_id),
-    teamIds: all<{ team_id: string }>(
+    )).map((item) => item.workspace_id),
+    teamIds: (await all<{ team_id: string }>(
       'SELECT team_id FROM member_team WHERE member_id = ?', row.id,
-    ).map((item) => item.team_id),
+    )).map((item) => item.team_id),
     emailVerifiedAt: toDate(row.email_verified_at),
     invitedById: row.invited_by_id ?? undefined,
     invitedAt: toDate(row.invited_at),
     approvedById: row.approved_by_id ?? undefined,
     approvedAt: toDate(row.approved_at),
     lastActiveAt: toDate(row.last_active_at),
+    mustChangePassword: fromBit(row.must_change_password),
     createdAt: new Date(row.created_at),
   }
 }
@@ -61,9 +64,9 @@ export interface AuditEntry {
  * Writes an audit record. Always called inside the same transaction as the
  * mutation it describes, so an action cannot succeed without leaving a trace.
  */
-export function recordAudit(entry: AuditEntry): void {
-  const actor = one<MemberRow>('SELECT * FROM member WHERE id = ?', entry.actorId)
-  run(
+export async function recordAudit(entry: AuditEntry): Promise<void> {
+  const actor = await one<MemberRow>('SELECT * FROM member WHERE id = ?', entry.actorId)
+  await run(
     `INSERT INTO audit_log
        (organization_id, workspace_id, actor_id, actor_name, actor_email, actor_avatar,
         action, resource, resource_id, changes, metadata, created_at)
@@ -84,8 +87,8 @@ export function recordAudit(entry: AuditEntry): void {
 }
 
 export const auditRepo = {
-  list(organizationId: string, limit = 50): AuditLog[] {
-    return all<{
+  async list(organizationId: string, limit = 50): Promise<AuditLog[]> {
+    return (await all<{
       id: number; organization_id: string; workspace_id: string | null
       actor_id: string | null; actor_name: string; actor_email: string; actor_avatar: string | null
       action: string; resource: string; resource_id: string | null
@@ -94,7 +97,7 @@ export const auditRepo = {
       `SELECT * FROM audit_log WHERE organization_id = ?
         ORDER BY created_at DESC, id DESC LIMIT ?`,
       organizationId, limit,
-    ).map((row) => ({
+    )).map((row) => ({
       id: String(row.id),
       organizationId: row.organization_id,
       workspaceId: row.workspace_id ?? undefined,
@@ -118,14 +121,14 @@ export const auditRepo = {
 // ─── Notifications ────────────────────────────────────────────────────────────
 
 export const notificationRepo = {
-  listForMember(memberId: string, limit = 50): Notification[] {
-    return all<{
+  async listForMember(memberId: string, limit = 50): Promise<Notification[]> {
+    return (await all<{
       id: string; member_id: string; workspace_id: string; type: string; level: string
       title: string; message: string; link: string | null; read: number; created_at: string
     }>(
       'SELECT * FROM notification WHERE member_id = ? ORDER BY created_at DESC LIMIT ?',
       memberId, limit,
-    ).map((row) => ({
+    )).map((row) => ({
       id: row.id,
       userId: row.member_id,
       workspaceId: row.workspace_id,
@@ -139,32 +142,32 @@ export const notificationRepo = {
     }))
   },
 
-  create(input: {
+  async create(input: {
     memberId: string; workspaceId: string; type: Notification['type']
     level: NotificationLevel; title: string; message: string; link?: string
-  }): void {
-    run(
+  }): Promise<void> {
+    await run(
       `INSERT INTO notification (id, member_id, workspace_id, type, level, title, message, link, read, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       newId('notif'), input.memberId, input.workspaceId, input.type, input.level,
-      input.title, input.message, input.link ?? null, nowIso(),
+      input.title, input.message, input.link ?? null, toBit(false), nowIso(),
     )
   },
 
-  markRead(notificationId: string, memberId: string): void {
-    run('UPDATE notification SET read = 1 WHERE id = ? AND member_id = ?', notificationId, memberId)
+  async markRead(notificationId: string, memberId: string): Promise<void> {
+    await run('UPDATE notification SET read = ? WHERE id = ? AND member_id = ?', toBit(true), notificationId, memberId)
   },
 
-  markAllRead(memberId: string): void {
-    run('UPDATE notification SET read = 1 WHERE member_id = ?', memberId)
+  async markAllRead(memberId: string): Promise<void> {
+    await run('UPDATE notification SET read = ? WHERE member_id = ?', toBit(true), memberId)
   },
 }
 
 // ─── Tenancy ──────────────────────────────────────────────────────────────────
 
 export const orgRepo = {
-  get(organizationId: string): Organization | null {
-    const row = one<{
+  async get(organizationId: string): Promise<Organization | null> {
+    const row = await one<{
       id: string; name: string; slug: string; logo: string | null; plan: string
       sso_enabled: number; sso_provider: string | null; verified_domains: string
       settings: string; created_at: string
@@ -186,15 +189,15 @@ export const orgRepo = {
 }
 
 export const workspaceRepo = {
-  list(organizationId: string): Workspace[] {
-    return all<{
+  async list(organizationId: string): Promise<Workspace[]> {
+    return (await all<{
       id: string; organization_id: string; name: string; slug: string
       description: string | null; status: string; integration_ids: string
       created_at: string; updated_at: string; archived_at: string | null
     }>(
       'SELECT * FROM workspace WHERE organization_id = ? ORDER BY created_at',
       organizationId,
-    ).map((row) => ({
+    )).map((row) => ({
       id: row.id,
       organizationId: row.organization_id,
       name: row.name,
@@ -210,32 +213,63 @@ export const workspaceRepo = {
 }
 
 export const memberRepo = {
-  list(organizationId: string): Member[] {
-    return all<MemberRow>(
+  async list(organizationId: string): Promise<Member[]> {
+    const rows = await all<MemberRow>(
       'SELECT * FROM member WHERE organization_id = ? ORDER BY name',
       organizationId,
-    ).map(hydrateMember)
+    )
+    return Promise.all(rows.map(hydrateMember))
   },
 
-  get(memberId: string): Member | null {
-    const row = one<MemberRow>('SELECT * FROM member WHERE id = ?', memberId)
+  async get(memberId: string): Promise<Member | null> {
+    const row = await one<MemberRow>('SELECT * FROM member WHERE id = ?', memberId)
     return row ? hydrateMember(row) : null
   },
 
-  findByEmail(email: string): Member | null {
-    const row = one<MemberRow>(
+  /** Server-side only — the hash never leaves this module's callers. */
+  async credentialsFor(email: string): Promise<{ memberId: string; passwordHash: string | null } | null> {
+    const row = await one<{ id: string; password_hash: string | null }>(
+      'SELECT id, password_hash FROM member WHERE lower(email) = lower(?)', email.trim(),
+    )
+    return row ? { memberId: row.id, passwordHash: row.password_hash } : null
+  },
+
+  async setPassword(memberId: string, passwordHash: string, actorId: string): Promise<void> {
+    await transaction(async () => {
+      const member = await one<MemberRow>('SELECT * FROM member WHERE id = ?', memberId)
+      if (!member) throw new NotFoundError('Member not found')
+      await run(
+        `UPDATE member SET password_hash = ?, must_change_password = ?, password_changed_at = ?
+         WHERE id = ?`,
+        passwordHash, toBit(false), nowIso(), memberId,
+      )
+      // The audit record deliberately carries no password material.
+      await recordAudit({
+        organizationId: member.organization_id,
+        actorId, action: 'update', resource: 'member', resourceId: memberId,
+        metadata: { field: 'password' },
+      })
+    })
+  },
+
+  async touchLastActive(memberId: string): Promise<void> {
+    await run('UPDATE member SET last_active_at = ? WHERE id = ?', nowIso(), memberId)
+  },
+
+  async findByEmail(email: string): Promise<Member | null> {
+    const row = await one<MemberRow>(
       'SELECT * FROM member WHERE lower(email) = lower(?)', email.trim(),
     )
     return row ? hydrateMember(row) : null
   },
 
-  setStatus(memberId: string, status: AccountStatus, actorId: string): Member {
-    return transaction(() => {
-      const before = one<MemberRow>('SELECT * FROM member WHERE id = ?', memberId)
+  async setStatus(memberId: string, status: AccountStatus, actorId: string): Promise<Member> {
+    return transaction(async () => {
+      const before = await one<MemberRow>('SELECT * FROM member WHERE id = ?', memberId)
       if (!before) throw new NotFoundError('Member not found')
 
       const approving = status === 'approved'
-      run(
+      await run(
         `UPDATE member SET status = ?,
            approved_by_id = CASE WHEN ? THEN ? ELSE approved_by_id END,
            approved_at    = CASE WHEN ? THEN ? ELSE approved_at END
@@ -258,7 +292,7 @@ export const memberRepo = {
 
       // Tell the newly approved member their access is live.
       if (before.status === 'pending' && status === 'approved') {
-        const workspace = one<{ workspace_id: string }>(
+        const workspace = await one<{ workspace_id: string }>(
           'SELECT workspace_id FROM member_workspace WHERE member_id = ? LIMIT 1', memberId,
         )
         if (workspace) {
@@ -271,16 +305,16 @@ export const memberRepo = {
         }
       }
 
-      return memberRepo.get(memberId)!
+      return (await memberRepo.get(memberId))!
     })
   },
 
-  remove(memberId: string, actorId: string): void {
-    transaction(() => {
-      const member = one<MemberRow>('SELECT * FROM member WHERE id = ?', memberId)
+  async remove(memberId: string, actorId: string): Promise<void> {
+    await transaction(async () => {
+      const member = await one<MemberRow>('SELECT * FROM member WHERE id = ?', memberId)
       if (!member) throw new NotFoundError('Member not found')
       // Cascades clear member_workspace, member_team and notifications.
-      run('DELETE FROM member WHERE id = ?', memberId)
+      await run('DELETE FROM member WHERE id = ?', memberId)
       recordAudit({
         organizationId: member.organization_id,
         actorId, action: 'remove', resource: 'member', resourceId: memberId,
@@ -291,13 +325,13 @@ export const memberRepo = {
 }
 
 export const teamRepo = {
-  list(organizationId: string, workspaceId?: string): Team[] {
+  async list(organizationId: string, workspaceId?: string): Promise<Team[]> {
     const rows = workspaceId
-      ? all<Record<string, string | null>>(
+      ? await all<Record<string, string | null>>(
           'SELECT * FROM team WHERE organization_id = ? AND workspace_id = ? ORDER BY name',
           organizationId, workspaceId,
         )
-      : all<Record<string, string | null>>(
+      : await all<Record<string, string | null>>(
           'SELECT * FROM team WHERE organization_id = ? ORDER BY name', organizationId,
         )
 
@@ -313,15 +347,15 @@ export const teamRepo = {
     }))
   },
 
-  create(
+  async create(
     input: {
       organizationId: string; workspaceId: string; name: string; description?: string
       releaseManagerId?: string; qaLeadId?: string
     },
     actorId: string,
-  ): Team {
-    return transaction(() => {
-      const duplicate = one<{ id: string }>(
+  ): Promise<Team> {
+    return transaction(async () => {
+      const duplicate = await one<{ id: string }>(
         'SELECT id FROM team WHERE workspace_id = ? AND lower(name) = lower(?)',
         input.workspaceId, input.name.trim(),
       )
@@ -330,7 +364,7 @@ export const teamRepo = {
       }
 
       const id = newId('team')
-      run(
+      await run(
         `INSERT INTO team (id, organization_id, workspace_id, name, description,
                            release_manager_id, qa_lead_id, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -343,16 +377,16 @@ export const teamRepo = {
         actorId, action: 'create', resource: 'team', resourceId: id,
         metadata: { name: input.name },
       })
-      return teamRepo.list(input.organizationId).find((team) => team.id === id)!
+      return (await teamRepo.list(input.organizationId)).find((team) => team.id === id)!
     })
   },
 
-  update(teamId: string, patch: Partial<Team>, actorId: string): Team {
-    return transaction(() => {
-      const existing = one<Record<string, string | null>>('SELECT * FROM team WHERE id = ?', teamId)
+  async update(teamId: string, patch: Partial<Team>, actorId: string): Promise<Team> {
+    return transaction(async () => {
+      const existing = await one<Record<string, string | null>>('SELECT * FROM team WHERE id = ?', teamId)
       if (!existing) throw new NotFoundError('Team not found')
 
-      run(
+      await run(
         `UPDATE team SET name = ?, description = ?, workspace_id = ?,
                          release_manager_id = ?, qa_lead_id = ?
          WHERE id = ?`,
@@ -369,15 +403,15 @@ export const teamRepo = {
         actorId, action: 'update', resource: 'team', resourceId: teamId,
         metadata: { name: patch.name ?? existing.name },
       })
-      return teamRepo.list(existing.organization_id as string).find((team) => team.id === teamId)!
+      return (await teamRepo.list(existing.organization_id as string)).find((team) => team.id === teamId)!
     })
   },
 
-  remove(teamId: string, actorId: string): void {
-    transaction(() => {
-      const existing = one<Record<string, string | null>>('SELECT * FROM team WHERE id = ?', teamId)
+  async remove(teamId: string, actorId: string): Promise<void> {
+    await transaction(async () => {
+      const existing = await one<Record<string, string | null>>('SELECT * FROM team WHERE id = ?', teamId)
       if (!existing) throw new NotFoundError('Team not found')
-      run('DELETE FROM team WHERE id = ?', teamId)   // member_team cascades
+      await run('DELETE FROM team WHERE id = ?', teamId)   // member_team cascades
       recordAudit({
         organizationId: existing.organization_id as string,
         workspaceId: existing.workspace_id as string,
@@ -387,14 +421,14 @@ export const teamRepo = {
     })
   },
 
-  setMembers(teamId: string, memberIds: string[], actorId: string): void {
-    transaction(() => {
-      const existing = one<Record<string, string | null>>('SELECT * FROM team WHERE id = ?', teamId)
+  async setMembers(teamId: string, memberIds: string[], actorId: string): Promise<void> {
+    await transaction(async () => {
+      const existing = await one<Record<string, string | null>>('SELECT * FROM team WHERE id = ?', teamId)
       if (!existing) throw new NotFoundError('Team not found')
 
-      run('DELETE FROM member_team WHERE team_id = ?', teamId)
+      await run('DELETE FROM member_team WHERE team_id = ?', teamId)
       for (const memberId of memberIds) {
-        run('INSERT OR IGNORE INTO member_team (member_id, team_id) VALUES (?, ?)', memberId, teamId)
+        await run('INSERT OR IGNORE INTO member_team (member_id, team_id) VALUES (?, ?)', memberId, teamId)
       }
       recordAudit({
         organizationId: existing.organization_id as string,
@@ -407,11 +441,12 @@ export const teamRepo = {
 }
 
 export const invitationRepo = {
-  list(organizationId: string): Invitation[] {
-    return all<Record<string, string | number | null>>(
+  async list(organizationId: string): Promise<Invitation[]> {
+    const rows = await all<Record<string, string | number | null>>(
       'SELECT * FROM invitation WHERE organization_id = ? ORDER BY invited_at DESC',
       organizationId,
-    ).map((row) => ({
+    )
+    return rows.map((row) => ({
       id: row.id as string,
       organizationId: row.organization_id as string,
       email: row.email as string,
@@ -430,25 +465,25 @@ export const invitationRepo = {
     }))
   },
 
-  create(
+  async create(
     input: {
       organizationId: string; email: string; roleId: RoleId
       workspaceId: string; teamId?: string; expiryDays: number
     },
     actorId: string,
-  ): Invitation {
-    return transaction(() => {
+  ): Promise<Invitation> {
+    return transaction(async () => {
       const email = input.email.trim().toLowerCase()
 
-      if (one<{ id: string }>('SELECT id FROM member WHERE organization_id = ? AND lower(email) = ?', input.organizationId, email)) {
+      if (await one<{ id: string }>('SELECT id FROM member WHERE organization_id = ? AND lower(email) = ?', input.organizationId, email)) {
         throw new ConflictError('That email already belongs to a member of this organization')
       }
-      if (one<{ id: string }>("SELECT id FROM invitation WHERE organization_id = ? AND lower(email) = ? AND status = 'pending'", input.organizationId, email)) {
+      if (await one<{ id: string }>("SELECT id FROM invitation WHERE organization_id = ? AND lower(email) = ? AND status = 'pending'", input.organizationId, email)) {
         throw new ConflictError('An invitation is already pending for that email')
       }
 
       const id = newId('inv')
-      run(
+      await run(
         `INSERT INTO invitation
            (id, organization_id, email, role_id, workspace_id, team_id, status,
             token_hash, invited_by_id, invited_at, expires_at, resend_count)
@@ -462,18 +497,18 @@ export const invitationRepo = {
         actorId, action: 'invite', resource: 'invitation', resourceId: id,
         metadata: { invitedEmail: email },
       })
-      return invitationRepo.list(input.organizationId).find((item) => item.id === id)!
+      return (await invitationRepo.list(input.organizationId)).find((item) => item.id === id)!
     })
   },
 
-  resend(invitationId: string, actorId: string, expiryDays: number): void {
-    transaction(() => {
-      const existing = one<Record<string, string | number | null>>(
+  async resend(invitationId: string, actorId: string, expiryDays: number): Promise<void> {
+    await transaction(async () => {
+      const existing = await one<Record<string, string | number | null>>(
         'SELECT * FROM invitation WHERE id = ?', invitationId,
       )
       if (!existing) throw new NotFoundError('Invitation not found')
 
-      run(
+      await run(
         `UPDATE invitation SET status = 'pending', resent_at = ?, expires_at = ?,
                                resend_count = resend_count + 1
          WHERE id = ?`,
@@ -487,13 +522,13 @@ export const invitationRepo = {
     })
   },
 
-  cancel(invitationId: string, actorId: string): void {
-    transaction(() => {
-      const existing = one<Record<string, string | null>>(
+  async cancel(invitationId: string, actorId: string): Promise<void> {
+    await transaction(async () => {
+      const existing = await one<Record<string, string | null>>(
         'SELECT * FROM invitation WHERE id = ?', invitationId,
       )
       if (!existing) throw new NotFoundError('Invitation not found')
-      run("UPDATE invitation SET status = 'cancelled' WHERE id = ?", invitationId)
+      await run("UPDATE invitation SET status = 'cancelled' WHERE id = ?", invitationId)
       recordAudit({
         organizationId: existing.organization_id as string,
         actorId, action: 'delete', resource: 'invitation', resourceId: invitationId,
@@ -503,12 +538,12 @@ export const invitationRepo = {
   },
 
   /** Called by the scheduled job. */
-  expireOverdue(): number {
-    const overdue = all<{ id: string }>(
+  async expireOverdue(): Promise<number> {
+    const overdue = await all<{ id: string }>(
       "SELECT id FROM invitation WHERE status = 'pending' AND expires_at <= ?", nowIso(),
     )
     for (const item of overdue) {
-      run("UPDATE invitation SET status = 'expired' WHERE id = ?", item.id)
+      await run("UPDATE invitation SET status = 'expired' WHERE id = ?", item.id)
     }
     return overdue.length
   },
@@ -517,11 +552,11 @@ export const invitationRepo = {
 // ─── Integrations & webhooks ──────────────────────────────────────────────────
 
 export const integrationRepo = {
-  list(workspaceId: string): Integration[] {
-    return all<{
+  async list(workspaceId: string): Promise<Integration[]> {
+    return (await all<{
       id: string; workspace_id: string; type: string; name: string; enabled: number
       config: string; last_sync_at: string | null; created_at: string
-    }>('SELECT * FROM integration WHERE workspace_id = ?', workspaceId).map((row) => ({
+    }>('SELECT * FROM integration WHERE workspace_id = ?', workspaceId)).map((row) => ({
       id: row.id,
       workspaceId: row.workspace_id,
       type: row.type as Integration['type'],
@@ -534,23 +569,23 @@ export const integrationRepo = {
     }))
   },
 
-  setEnabled(
+  async setEnabled(
     workspaceId: string, type: Integration['type'], enabled: boolean, actorId: string,
     organizationId: string,
-  ): Integration {
-    return transaction(() => {
-      const existing = one<{ id: string; enabled: number }>(
+  ): Promise<Integration> {
+    return transaction(async () => {
+      const existing = await one<{ id: string; enabled: number }>(
         'SELECT id, enabled FROM integration WHERE workspace_id = ? AND type = ?',
         workspaceId, type,
       )
 
       if (existing) {
-        run(
+        await run(
           'UPDATE integration SET enabled = ?, last_sync_at = CASE WHEN ? THEN ? ELSE last_sync_at END WHERE id = ?',
           toBit(enabled), toBit(enabled), nowIso(), existing.id,
         )
       } else {
-        run(
+        await run(
           `INSERT INTO integration (id, workspace_id, type, name, enabled, config, last_sync_at, created_at)
            VALUES (?, ?, ?, ?, ?, '{}', ?, ?)`,
           newId('int'), workspaceId, type, type === 'jira' ? 'Jira Cloud' : type,
@@ -565,12 +600,12 @@ export const integrationRepo = {
         metadata: { integration: type },
       })
 
-      return integrationRepo.list(workspaceId).find((item) => item.type === type)!
+      return (await integrationRepo.list(workspaceId)).find((item) => item.type === type)!
     })
   },
 
-  recordSync(workspaceId: string, type: Integration['type']): void {
-    run(
+  async recordSync(workspaceId: string, type: Integration['type']): Promise<void> {
+    await run(
       'UPDATE integration SET last_sync_at = ? WHERE workspace_id = ? AND type = ?',
       nowIso(), workspaceId, type,
     )
@@ -622,16 +657,17 @@ function hydrateWebhook(row: WebhookRow): WebhookEndpointView {
 }
 
 export const webhookRepo = {
-  list(workspaceId: string): WebhookEndpointView[] {
-    return all<WebhookRow>(
+  async list(workspaceId: string): Promise<WebhookEndpointView[]> {
+    const rows = await all<WebhookRow>(
       'SELECT * FROM webhook_endpoint WHERE workspace_id = ? ORDER BY channel, label',
       workspaceId,
-    ).map(hydrateWebhook)
+    )
+    return rows.map(hydrateWebhook)
   },
 
   /** Server-side only: the decrypted URL, for actually delivering a message. */
-  getUrl(webhookId: string): string | null {
-    const row = one<{ url_encrypted: string }>(
+  async getUrl(webhookId: string): Promise<string | null> {
+    const row = await one<{ url_encrypted: string }>(
       'SELECT url_encrypted FROM webhook_endpoint WHERE id = ?', webhookId,
     )
     if (!row) return null
@@ -643,17 +679,17 @@ export const webhookRepo = {
     }
   },
 
-  create(
+  async create(
     input: {
       workspaceId: string; organizationId: string; channel: WebhookChannel
       label: string; url: string; minimumLevel: NotificationLevel; enabled: boolean
       quietHours?: { start: string; end: string; timezone: string } | null
     },
     actorId: string,
-  ): WebhookEndpointView {
-    return transaction(() => {
+  ): Promise<WebhookEndpointView> {
+    return transaction(async () => {
       const id = newId('wh')
-      run(
+      await run(
         `INSERT INTO webhook_endpoint
            (id, workspace_id, channel, label, url_encrypted, url_hint, minimum_level,
             enabled, quiet_hours, last_status, created_by_id, created_at, updated_at)
@@ -669,11 +705,11 @@ export const webhookRepo = {
         // The URL is a credential and must never reach the audit log either.
         metadata: { channel: input.channel, label: input.label },
       })
-      return webhookRepo.list(input.workspaceId).find((item) => item.id === id)!
+      return (await webhookRepo.list(input.workspaceId)).find((item) => item.id === id)!
     })
   },
 
-  update(
+  async update(
     webhookId: string,
     patch: {
       label?: string; url?: string; minimumLevel?: NotificationLevel
@@ -681,9 +717,9 @@ export const webhookRepo = {
     },
     actorId: string,
     organizationId: string,
-  ): WebhookEndpointView {
-    return transaction(() => {
-      const existing = one<WebhookRow>('SELECT * FROM webhook_endpoint WHERE id = ?', webhookId)
+  ): Promise<WebhookEndpointView> {
+    return transaction(async () => {
+      const existing = await one<WebhookRow>('SELECT * FROM webhook_endpoint WHERE id = ?', webhookId)
       if (!existing) throw new NotFoundError('Webhook not found')
 
       // An omitted URL means "leave it alone" — editing a label must not force
@@ -691,7 +727,7 @@ export const webhookRepo = {
       const urlEncrypted = patch.url ? encryptSecret(patch.url) : existing.url_encrypted
       const urlHint = patch.url ? maskUrl(patch.url) : existing.url_hint
 
-      run(
+      await run(
         `UPDATE webhook_endpoint
             SET label = ?, url_encrypted = ?, url_hint = ?, minimum_level = ?,
                 enabled = ?, quiet_hours = ?, updated_at = ?,
@@ -712,15 +748,15 @@ export const webhookRepo = {
         actorId, action: 'update', resource: 'integration', resourceId: webhookId,
         metadata: { channel: existing.channel, label: patch.label ?? existing.label },
       })
-      return webhookRepo.list(existing.workspace_id).find((item) => item.id === webhookId)!
+      return (await webhookRepo.list(existing.workspace_id)).find((item) => item.id === webhookId)!
     })
   },
 
-  remove(webhookId: string, actorId: string, organizationId: string): void {
-    transaction(() => {
-      const existing = one<WebhookRow>('SELECT * FROM webhook_endpoint WHERE id = ?', webhookId)
+  async remove(webhookId: string, actorId: string, organizationId: string): Promise<void> {
+    await transaction(async () => {
+      const existing = await one<WebhookRow>('SELECT * FROM webhook_endpoint WHERE id = ?', webhookId)
       if (!existing) throw new NotFoundError('Webhook not found')
-      run('DELETE FROM webhook_endpoint WHERE id = ?', webhookId)
+      await run('DELETE FROM webhook_endpoint WHERE id = ?', webhookId)
       recordAudit({
         organizationId, workspaceId: existing.workspace_id,
         actorId, action: 'delete', resource: 'integration', resourceId: webhookId,
@@ -729,8 +765,8 @@ export const webhookRepo = {
     })
   },
 
-  recordTest(webhookId: string, ok: boolean, error?: string): void {
-    run(
+  async recordTest(webhookId: string, ok: boolean, error?: string): Promise<void> {
+    await run(
       'UPDATE webhook_endpoint SET last_status = ?, last_error = ?, last_tested_at = ? WHERE id = ?',
       ok ? 'ok' : 'failed', error ?? null, nowIso(), webhookId,
     )
@@ -739,34 +775,42 @@ export const webhookRepo = {
 
 // ─── Delivery data ────────────────────────────────────────────────────────────
 
-function payloads<T>(table: string, workspaceId: string, extra = ''): T[] {
-  return all<{ payload: string }>(
+async function payloads<T>(table: string, workspaceId: string, extra = ''): Promise<T[]> {
+  const rows = await all<{ payload: string }>(
     `SELECT payload FROM ${table} WHERE workspace_id = ? ${extra}`, workspaceId,
-  ).map((row) => JSON.parse(row.payload) as T)
+  )
+  return rows.map((row) => JSON.parse(row.payload) as T)
 }
 
 export const deliveryRepo = {
-  sprints: <T>(workspaceId: string) => payloads<T>('sprint', workspaceId, 'ORDER BY start_date DESC'),
-  releases: <T>(workspaceId: string) => payloads<T>('release', workspaceId, 'ORDER BY target_date'),
-  qaQueue: <T>(workspaceId: string) => payloads<T>('qa_item', workspaceId),
-  qaTesters: <T>(workspaceId: string) => payloads<T>('qa_tester', workspaceId),
+  sprints: <T>(workspaceId: string) =>
+    payloads<T>('sprint', workspaceId, 'ORDER BY start_date DESC'),
+  releases: <T>(workspaceId: string) =>
+    payloads<T>('release', workspaceId, 'ORDER BY target_date'),
+  qaQueue: <T>(workspaceId: string) =>
+    payloads<T>('qa_item', workspaceId),
+  qaTesters: <T>(workspaceId: string) =>
+    payloads<T>('qa_tester', workspaceId),
   riskTimeline: <T>(workspaceId: string) =>
     payloads<T>('risk_event', workspaceId, 'ORDER BY occurred_at DESC'),
-  serviceHealth: <T>(workspaceId: string) => payloads<T>('service_health', workspaceId),
-  signals: <T>(workspaceId: string, kind: 'signal' | 'live') =>
-    all<{ payload: string }>(
+  serviceHealth: <T>(workspaceId: string) =>
+    payloads<T>('service_health', workspaceId),
+  async signals<T>(workspaceId: string, kind: 'signal' | 'live'): Promise<T[]> {
+    const rows = await all<{ payload: string }>(
       'SELECT payload FROM signal WHERE workspace_id = ? AND kind = ?', workspaceId, kind,
-    ).map((row) => JSON.parse(row.payload) as T),
+    )
+    return rows.map((row) => JSON.parse(row.payload) as T)
+  },
 
-  metrics<T>(workspaceId: string): T | null {
-    const row = one<{ payload: string }>(
+  async metrics<T>(workspaceId: string): Promise<T | null> {
+    const row = await one<{ payload: string }>(
       'SELECT payload FROM dashboard_metrics WHERE workspace_id = ?', workspaceId,
     )
     return row ? (JSON.parse(row.payload) as T) : null
   },
 
-  billing<T>(workspaceId: string): T | null {
-    const row = one<{ payload: string }>(
+  async billing<T>(workspaceId: string): Promise<T | null> {
+    const row = await one<{ payload: string }>(
       'SELECT payload FROM billing WHERE workspace_id = ?', workspaceId,
     )
     return row ? (JSON.parse(row.payload) as T) : null
@@ -774,12 +818,12 @@ export const deliveryRepo = {
 }
 
 export const ruleRepo = {
-  list(workspaceId: string): Rule[] {
-    return all<{
+  async list(workspaceId: string): Promise<Rule[]> {
+    return (await all<{
       id: string; name: string; category: string; enabled: number; action: string
       score_impact: number; description: string; conditions: string
       triggered_count: number; last_triggered: string | null
-    }>('SELECT * FROM rule WHERE workspace_id = ? ORDER BY name', workspaceId).map((row) => ({
+    }>('SELECT * FROM rule WHERE workspace_id = ? ORDER BY name', workspaceId)).map((row) => ({
       id: row.id,
       name: row.name,
       category: row.category as Rule['category'],
@@ -793,25 +837,25 @@ export const ruleRepo = {
     }))
   },
 
-  setEnabled(
+  async setEnabled(
     ruleId: string, enabled: boolean, workspaceId: string,
     actorId: string, organizationId: string,
-  ): Rule {
-    return transaction(() => {
-      const existing = one<{ id: string; name: string; enabled: number }>(
+  ): Promise<Rule> {
+    return transaction(async () => {
+      const existing = await one<{ id: string; name: string; enabled: number }>(
         'SELECT id, name, enabled FROM rule WHERE id = ? AND workspace_id = ?',
         ruleId, workspaceId,
       )
       if (!existing) throw new NotFoundError('Rule not found')
 
-      run('UPDATE rule SET enabled = ? WHERE id = ?', toBit(enabled), ruleId)
+      await run('UPDATE rule SET enabled = ? WHERE id = ?', toBit(enabled), ruleId)
       recordAudit({
         organizationId, workspaceId, actorId,
         action: 'update', resource: 'rule', resourceId: ruleId,
         metadata: { name: existing.name },
         changes: { enabled: { before: fromBit(existing.enabled), after: enabled } },
       })
-      return ruleRepo.list(workspaceId).find((rule) => rule.id === ruleId)!
+      return (await ruleRepo.list(workspaceId)).find((rule) => rule.id === ruleId)!
     })
   },
 }

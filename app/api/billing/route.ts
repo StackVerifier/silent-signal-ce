@@ -5,5 +5,5 @@ import type { BillingInfo } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 
-export const GET = route({ permission: PERMISSIONS.BILLING_READ }, (context) =>
+export const GET = route({ permission: PERMISSIONS.BILLING_READ }, async (context) =>
   deliveryRepo.billing<BillingInfo>(context.workspaceId))

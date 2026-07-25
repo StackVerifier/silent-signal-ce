@@ -5,7 +5,7 @@ import type { QAItem, QATester } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 
-export const GET = route({ permission: PERMISSIONS.QA_READ }, (context, request) => {
+export const GET = route({ permission: PERMISSIONS.QA_READ }, async (context, request) => {
   const view = new URL(request.url).searchParams.get('view')
   return view === 'testers'
     ? deliveryRepo.qaTesters<QATester>(context.workspaceId)
