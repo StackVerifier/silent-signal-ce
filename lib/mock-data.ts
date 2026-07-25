@@ -423,6 +423,42 @@ export const mockNotifications: Notification[] = [
   },
 ]
 
+// Additional notifications so the centre has realistic volume and mixed states.
+const moreNotifications: Notification[] = [
+  {
+    id: 'notif-4', userId: 'mem-1', workspaceId: 'ws-1', type: 'qa', level: 'high',
+    title: 'QA Queue Backing Up',
+    message: '18 items waiting — oldest has been queued for 6 days',
+    link: '/qa-queue', read: false, createdAt: new Date(Date.now() - 5400000),
+  },
+  {
+    id: 'notif-5', userId: 'mem-1', workspaceId: 'ws-1', type: 'system', level: 'medium',
+    title: 'Jira Sync Completed',
+    message: '1,284 issues synced from 3 boards in 42 seconds',
+    link: '/integrations', read: true, createdAt: new Date(Date.now() - 10800000),
+  },
+  {
+    id: 'notif-6', userId: 'mem-1', workspaceId: 'ws-1', type: 'admin', level: 'medium',
+    title: 'Two Members Awaiting Approval',
+    message: 'Faruk Demir and Gizem Aydın requested access',
+    link: '/members', read: false, createdAt: new Date(Date.now() - 86400000),
+  },
+  {
+    id: 'notif-7', userId: 'mem-1', workspaceId: 'ws-1', type: 'release', level: 'critical',
+    title: 'Release Gate Blocked',
+    message: 'Regression gate failed for Platform v2.4 — 9 tests red',
+    link: '/release', read: true, createdAt: new Date(Date.now() - 172800000),
+  },
+  {
+    id: 'notif-8', userId: 'mem-1', workspaceId: 'ws-1', type: 'system', level: 'low',
+    title: 'Slack Notification Delivered',
+    message: 'Critical risk alert posted to #release-risk',
+    link: '/notifications', read: true, createdAt: new Date(Date.now() - 259200000),
+  },
+]
+
+mockNotifications.push(...moreNotifications)
+
 // ─── Audit Logs ───────────────────────────────────────────────────────────────
 
 export const mockAuditLogs: AuditLog[] = [
@@ -463,6 +499,29 @@ export const mockAuditLogs: AuditLog[] = [
     createdAt: new Date(Date.now() - 172800000),
   },
 ]
+
+const moreAuditLogs: AuditLog[] = [
+  { id: 'audit-4', organizationId: 'org-1', workspaceId: 'ws-1', userId: 'mem-3', user: actor('mem-3'),
+    action: 'create', resource: 'rule', resourceId: 'rule-12',
+    metadata: { name: 'QA wait over 5 days' }, createdAt: new Date(Date.now() - 1500000) },
+  { id: 'audit-5', organizationId: 'org-1', workspaceId: 'ws-1', userId: 'mem-4', user: actor('mem-4'),
+    action: 'update', resource: 'integration', resourceId: 'int-2',
+    metadata: { integration: 'Slack' }, createdAt: new Date(Date.now() - 4200000) },
+  { id: 'audit-6', organizationId: 'org-1', workspaceId: 'ws-1', userId: 'mem-2', user: actor('mem-2'),
+    action: 'approve', resource: 'member', resourceId: 'mem-9',
+    metadata: { member: 'İrem Yıldız' }, createdAt: new Date(Date.now() - 7200000) },
+  { id: 'audit-7', organizationId: 'org-1', workspaceId: 'ws-2', userId: 'mem-1', user: actor('mem-1'),
+    action: 'create', resource: 'team', resourceId: 'team-5',
+    metadata: { name: 'Mobile Team' }, createdAt: new Date(Date.now() - 21600000) },
+  { id: 'audit-8', organizationId: 'org-1', workspaceId: 'ws-1', userId: 'mem-2', user: actor('mem-2'),
+    action: 'permission_change', resource: 'member', resourceId: 'mem-5',
+    changes: { roleId: { before: 'viewer', after: 'developer' } }, createdAt: new Date(Date.now() - 43200000) },
+  { id: 'audit-9', organizationId: 'org-1', workspaceId: 'ws-1', userId: 'mem-3', user: actor('mem-3'),
+    action: 'export', resource: 'config', resourceId: 'release-v2.4',
+    createdAt: new Date(Date.now() - 129600000) },
+]
+
+mockAuditLogs.push(...moreAuditLogs)
 
 // ─── Integrations ─────────────────────────────────────────────────────────────
 
