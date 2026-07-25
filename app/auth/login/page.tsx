@@ -1,19 +1,20 @@
 'use client'
 
-import { useState } from 'react'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { Suspense, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth-context'
-import { Mail, Lock, ArrowRight } from 'lucide-react'
+import { DEFAULT_DEMO_ACCOUNT } from '@/lib/auth-config'
+import { Mail, Lock, ArrowRight, ShieldCheck } from 'lucide-react'
 import { motion } from 'framer-motion'
 
 export const dynamic = 'force-dynamic'
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { login, isLoading } = useAuth()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const [email, setEmail] = useState(DEFAULT_DEMO_ACCOUNT.email)
+  const [password, setPassword] = useState(DEFAULT_DEMO_ACCOUNT.password)
   const [error, setError] = useState('')
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -21,7 +22,9 @@ export default function LoginPage() {
     setError('')
     try {
       await login(email, password)
-      router.push('/')
+      const redirect = searchParams.get('redirect')
+      router.replace(redirect && redirect.startsWith('/') ? redirect : '/')
+      router.refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')
     }
@@ -35,11 +38,19 @@ export default function LoginPage() {
     >
       <form onSubmit={handleSubmit} className="space-y-5">
         <div>
-          <label className="block text-sm font-medium text-[#E2E8F0] mb-1.5">Email Address</label>
+          <label htmlFor="email" className="block text-sm font-medium text-[#E2E8F0] mb-1.5">
+            Email Address
+          </label>
           <div className="relative">
-            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#64748B] pointer-events-none" />
+            <Mail
+              aria-hidden="true"
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#64748B] pointer-events-none"
+            />
             <input
+              id="email"
+              name="email"
               type="email"
+              autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="name@company.com"
@@ -51,11 +62,19 @@ export default function LoginPage() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-[#E2E8F0] mb-1.5">Password</label>
+          <label htmlFor="password" className="block text-sm font-medium text-[#E2E8F0] mb-1.5">
+            Password
+          </label>
           <div className="relative">
-            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#64748B] pointer-events-none" />
+            <Lock
+              aria-hidden="true"
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#64748B] pointer-events-none"
+            />
             <input
+              id="password"
+              name="password"
               type="password"
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
@@ -67,7 +86,10 @@ export default function LoginPage() {
         </div>
 
         {error && (
-          <div className="p-3 rounded-lg bg-[#EF4444]/10 border border-[#EF4444]/20 text-[#FCA5A5] text-sm">
+          <div
+            role="alert"
+            className="p-3 rounded-lg bg-[#EF4444]/10 border border-[#EF4444]/20 text-[#FCA5A5] text-sm"
+          >
             {error}
           </div>
         )}
@@ -75,20 +97,36 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={isLoading}
-          className="w-full bg-[#6C63FF] hover:bg-[#5B52CC] disabled:bg-[#64748B] text-white font-medium py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2"
+          className="w-full bg-[#6C63FF] hover:bg-[#5B52CC] disabled:bg-[#64748B] text-white font-medium py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6C63FF] focus-visible:ring-offset-2 focus-visible:ring-offset-[#070B18]"
         >
-          {isLoading ? 'Signing in...' : <>Sign In<ArrowRight className="w-4 h-4" /></>}
+          {isLoading ? 'Signing in...' : <>Sign In<ArrowRight aria-hidden="true" className="w-4 h-4" /></>}
         </button>
       </form>
 
-      <div className="mt-6 pt-6 border-t border-[#1E2D4A]">
-        <p className="text-sm text-[#64748B] text-center">
-          Don&apos;t have an account?{' '}
-          <Link href="/auth/register" className="text-[#6C63FF] hover:text-[#7D72FF] font-medium">
-            Sign up
-          </Link>
+      <div className="mt-6 p-3 rounded-lg bg-[#0F1824] border border-[#1E2D4A]">
+        <p className="flex items-center gap-2 text-xs font-medium text-[#94A3B8]">
+          <ShieldCheck aria-hidden="true" className="w-3.5 h-3.5 text-[#6C63FF]" />
+          Demo account — role: Administrator
         </p>
+        <dl className="mt-2 space-y-1 text-xs text-[#64748B] font-mono">
+          <div className="flex gap-2">
+            <dt className="w-16 shrink-0">email</dt>
+            <dd className="text-[#E2E8F0] break-all">{DEFAULT_DEMO_ACCOUNT.email}</dd>
+          </div>
+          <div className="flex gap-2">
+            <dt className="w-16 shrink-0">password</dt>
+            <dd className="text-[#E2E8F0]">{DEFAULT_DEMO_ACCOUNT.password}</dd>
+          </div>
+        </dl>
       </div>
     </motion.div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="h-64" />}>
+      <LoginForm />
+    </Suspense>
   )
 }

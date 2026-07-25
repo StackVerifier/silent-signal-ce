@@ -111,6 +111,17 @@
   }
 }
 
+/* Scroll container with no visible scrollbar (used by the sidebar nav) */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
 /* Glass card utility */
 .glass-card {
   background: rgba(21, 29, 50, 0.8);

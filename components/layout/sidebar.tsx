@@ -62,9 +62,9 @@ export function Sidebar() {
 
   return (
     <motion.aside
-      animate={{ width: collapsed ? 64 : 220 }}
+      animate={{ width: collapsed ? 64 : 248 }}
       transition={{ duration: 0.2, ease: 'easeInOut' }}
-      className="relative flex flex-col h-screen bg-[#111827] border-r border-[#1E2D4A] flex-shrink-0 overflow-hidden z-20"
+      className="relative flex flex-col h-dvh bg-[#111827] border-r border-[#1E2D4A] flex-shrink-0 overflow-hidden z-20"
     >
       {/* Logo */}
       <div className={cn(
@@ -115,7 +115,10 @@ export function Sidebar() {
       )}
 
       {/* Nav Items */}
-      <nav className="flex-1 px-2 py-3 space-y-4 overflow-y-auto">
+      <nav
+        aria-label="Primary"
+        className="flex-1 px-2 py-3 space-y-4 overflow-y-auto overflow-x-hidden no-scrollbar"
+      >
         {Object.entries({
           core: 'Monitoring',
           admin: 'Admin',
@@ -135,8 +138,9 @@ export function Sidebar() {
                     <Link
                       key={item.id}
                       href={item.href}
+                      aria-current={active ? 'page' : undefined}
                       className={cn(
-                        'relative flex items-center gap-3 px-2 py-2.5 rounded-lg transition-all duration-150 group',
+                        'relative flex items-center gap-2.5 px-2 py-2.5 rounded-lg transition-all duration-150 group min-w-0',
                         collapsed && 'justify-center px-2',
                         active
                           ? 'bg-[#6C63FF]/15 text-[#6C63FF]'
@@ -157,14 +161,15 @@ export function Sidebar() {
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
-                            className="flex-1 text-sm font-medium whitespace-nowrap"
+                            title={item.label}
+                            className="flex-1 min-w-0 text-sm font-medium whitespace-nowrap truncate"
                           >
                             {item.label}
                           </motion.span>
                         )}
                       </AnimatePresence>
                       {!collapsed && (
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
                           {item.badge && (
                             <span className="text-[10px] bg-[#1E2D4A] text-[#64748B] px-1.5 py-0.5 rounded font-mono">
                               {item.badge}
