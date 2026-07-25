@@ -2,7 +2,7 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { sessionService } from '@/services/session.service'
-import { ApiError } from '@/services/http'
+import { ApiError, SESSION_LOST_EVENT } from '@/services/http'
 import { can, canAll, canAny } from './rbac/access'
 import type { Permission } from './rbac/permissions'
 import type { AccessContext, Member, Organization, RoleDefinition, Workspace } from './rbac/types'
@@ -68,6 +68,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => { cancelled = true }
   }, [])
 
+  // A request elsewhere in the app found the session gone. Dropping the state
+  // here is what lets the guard react; nothing else in the tree polls for it.
+  useEffect(() => {
+    const onSessionLost = () => {
+      setAccess(null)
+      setWorkspaces([])
+    }
+    window.addEventListener(SESSION_LOST_EVENT, onSessionLost)
+    return () => window.removeEventListener(SESSION_LOST_EVENT, onSessionLost)
+  }, [])
+
   const login = useCallback(async (email: string, password: string) => {
     setIsLoading(true)
     try {
@@ -87,6 +98,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await sessionService.logout().catch(() => undefined)
     setAccess(null)
     setWorkspaces([])
+    // Clearing state is not leaving the application: without this the shell
+    // stayed on screen with no permissions, which reads as the pending
+    // "waiting for approval" account rather than as signed out. A full page
+    // load also drops the query cache holding the previous member's data.
+    window.location.assign('/auth/login')
   }, [])
 
   const switchWorkspace = useCallback(async (workspaceId: string) => {
