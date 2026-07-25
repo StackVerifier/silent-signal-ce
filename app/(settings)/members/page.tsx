@@ -9,7 +9,9 @@ import { InvitationStatusBadge, relativeTime } from '@/components/members/member
 import { PermissionGuard } from '@/components/rbac/permission-guard'
 import { EmptyState, ErrorState } from '@/components/states/data-states'
 import { useGatedQuery } from '@/hooks/use-gated-data'
-import { useInvitations, useMembers } from '@/lib/query/hooks'
+import { useInvitationAction, useInvitations, useMembers } from '@/lib/query/hooks'
+import { InviteMemberDialog } from '@/components/members/invite-member-dialog'
+import { useToast } from '@/components/ui/toast'
 import { useAuth } from '@/lib/auth-context'
 import { PERMISSIONS } from '@/lib/rbac/permissions'
 import { getRoleLabel } from '@/lib/rbac/roles'
@@ -21,6 +23,7 @@ type Tab = 'members' | 'invitations'
 export default function MembersPage() {
   const { can } = useAuth()
   const [tab, setTab] = useState<Tab>('members')
+  const [inviteOpen, setInviteOpen] = useState(false)
 
   const members = useGatedQuery(useMembers(), { permission: PERMISSIONS.MEMBERS_READ })
   const invitations = useGatedQuery(useInvitations(), { permission: PERMISSIONS.MEMBERS_READ })
@@ -42,7 +45,10 @@ export default function MembersPage() {
           }
           action={
             can(PERMISSIONS.MEMBERS_INVITE) ? (
-              <button className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#6C63FF] hover:bg-[#5B52CC] text-white rounded-lg font-medium text-sm transition-colors">
+              <button
+                onClick={() => setInviteOpen(true)}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#6C63FF] hover:bg-[#5B52CC] text-white rounded-lg font-medium text-sm transition-colors"
+              >
                 <UserPlus aria-hidden="true" className="w-4 h-4" />
                 Invite member
               </button>
@@ -78,7 +84,11 @@ export default function MembersPage() {
                   onRetry={members.retry}
                 />
               ) : (
-                <MembersTable members={memberList} isLoading={members.isSkeleton} />
+                <MembersTable
+                  members={memberList}
+                  isLoading={members.isSkeleton}
+                  onInvite={() => setInviteOpen(true)}
+                />
               )
             ) : invitations.state === 'error' ? (
               <ErrorState
@@ -87,11 +97,16 @@ export default function MembersPage() {
                 onRetry={invitations.retry}
               />
             ) : (
-              <InvitationList invitations={invitationList} isLoading={invitations.isSkeleton} />
+              <InvitationList
+                invitations={invitationList}
+                isLoading={invitations.isSkeleton}
+                onInvite={() => setInviteOpen(true)}
+              />
             )}
           </div>
         </div>
       </div>
+      <InviteMemberDialog open={inviteOpen} onClose={() => setInviteOpen(false)} />
     </PermissionGuard>
   )
 }
@@ -99,11 +114,30 @@ export default function MembersPage() {
 function InvitationList({
   invitations,
   isLoading,
+  onInvite,
 }: {
   invitations: Invitation[]
   isLoading: boolean
+  onInvite: () => void
 }) {
   const { can } = useAuth()
+  const invitationAction = useInvitationAction()
+  const toast = useToast()
+
+  const run = async (invitationId: string, action: 'resend' | 'cancel', email: string) => {
+    try {
+      await invitationAction.mutateAsync({ invitationId, action })
+      toast.success(
+        action === 'resend' ? 'Invitation resent' : 'Invitation cancelled',
+        action === 'resend' ? `A fresh link is on its way to ${email}.` : `${email} can no longer use the old link.`,
+      )
+    } catch (error) {
+      toast.error(
+        'Action failed',
+        error instanceof Error ? error.message : 'Please try again.',
+      )
+    }
+  }
 
   if (isLoading) {
     return (
@@ -122,7 +156,7 @@ function InvitationList({
           icon={Mail}
           title="No invitations sent yet"
           description="Invite teammates by email. They pick up their workspace, team and role automatically when they accept."
-          actions={can(PERMISSIONS.MEMBERS_INVITE) ? [{ label: 'Invite member' }] : []}
+          actions={can(PERMISSIONS.MEMBERS_INVITE) ? [{ label: 'Invite member', onClick: onInvite }] : []}
         />
       </div>
     )
@@ -161,11 +195,19 @@ function InvitationList({
 
           {can(PERMISSIONS.MEMBERS_INVITE) && invitation.status !== 'accepted' && (
             <div className="flex items-center gap-2 shrink-0">
-              <button className="text-[11px] font-medium text-[#6C63FF] hover:text-[#8B85FF] transition-colors">
+              <button
+                onClick={() => run(invitation.id, 'resend', invitation.email)}
+                disabled={invitationAction.isPending}
+                className="text-[11px] font-medium text-[#6C63FF] hover:text-[#8B85FF] disabled:opacity-50 transition-colors"
+              >
                 Resend
               </button>
               {invitation.status === 'pending' && (
-                <button className="text-[11px] font-medium text-[#64748B] hover:text-[#EF4444] transition-colors">
+                <button
+                  onClick={() => run(invitation.id, 'cancel', invitation.email)}
+                  disabled={invitationAction.isPending}
+                  className="text-[11px] font-medium text-[#64748B] hover:text-[#EF4444] disabled:opacity-50 transition-colors"
+                >
                   Cancel
                 </button>
               )}

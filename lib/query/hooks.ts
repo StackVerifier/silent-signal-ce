@@ -11,6 +11,7 @@ import {
 import type { MemberQuery } from '@/services/member.service'
 import type { ChannelRoute } from '@/services/notification.service'
 import type { JiraFieldMapping } from '@/services/jira.service'
+import type { RoleId, Team } from '@/lib/rbac/types'
 
 /**
  * Query hooks are the only thing components import — never a service directly.
@@ -29,6 +30,11 @@ function useGate(permission: Permission) {
 }
 
 type Options<T> = Omit<UseQueryOptions<T, Error, T>, 'queryKey' | 'queryFn' | 'enabled'>
+
+/** Every mutation records the acting member, which is what makes audit real. */
+function useActorId() {
+  return useAuth().member?.id ?? 'mem-1'
+}
 
 // ─── Delivery ─────────────────────────────────────────────────────────────────
 
@@ -154,12 +160,50 @@ export function useJiraBoards(projectKey?: string) {
   })
 }
 
+export function useJiraFieldMapping() {
+  const { enabled, workspaceId } = useGate(PERMISSIONS.INTEGRATION_READ)
+  return useQuery({
+    queryKey: queryKeys.jiraFields(workspaceId),
+    queryFn: ({ signal }) => jiraService.getFieldMapping(workspaceId, signal),
+    enabled,
+  })
+}
+
+export function useConnectJira() {
+  const queryClient = useQueryClient()
+  const { workspace } = useAuth()
+  const actorId = useActorId()
+  return useMutation({
+    mutationFn: () => jiraService.startOAuth(workspace?.id, actorId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryScopes.allJira })
+      queryClient.invalidateQueries({ queryKey: queryScopes.allAudit })
+    },
+  })
+}
+
+export function useDisconnectJira() {
+  const queryClient = useQueryClient()
+  const { workspace } = useAuth()
+  const actorId = useActorId()
+  return useMutation({
+    mutationFn: () => jiraService.disconnect(workspace?.id, actorId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryScopes.allJira })
+      queryClient.invalidateQueries({ queryKey: queryScopes.allAudit })
+    },
+  })
+}
+
 export function useTriggerJiraSync() {
   const queryClient = useQueryClient()
   const { workspace } = useAuth()
   return useMutation({
     mutationFn: () => jiraService.triggerSync(workspace?.id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryScopes.allJira }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryScopes.allJira })
+      queryClient.invalidateQueries({ queryKey: queryScopes.allNotifications })
+    },
   })
 }
 
@@ -194,6 +238,16 @@ export function useInvitations() {
   })
 }
 
+export function useWorkspaces() {
+  const { isLoading, isGated } = useAuth()
+  return useQuery({
+    queryKey: queryKeys.workspaces(),
+    queryFn: ({ signal }) => memberService.listWorkspaces(signal),
+    enabled: !isLoading && !isGated,
+    staleTime: 5 * 60_000,
+  })
+}
+
 export function useTeams() {
   const { enabled, workspaceId } = useGate(PERMISSIONS.TEAMS_READ)
   return useQuery({
@@ -207,37 +261,118 @@ type MemberAction = 'approve' | 'reject' | 'suspend' | 'activate' | 'remove'
 
 export function useMemberAction() {
   const queryClient = useQueryClient()
+  const actorId = useActorId()
   return useMutation({
     mutationFn: async ({ memberId, action }: { memberId: string; action: MemberAction }): Promise<void> => {
       switch (action) {
-        case 'approve': await memberService.approve(memberId); return
-        case 'reject': await memberService.reject(memberId); return
-        case 'suspend': await memberService.suspend(memberId); return
-        case 'activate': await memberService.activate(memberId); return
-        case 'remove': await memberService.remove(memberId); return
+        case 'approve': await memberService.approve(memberId, actorId); return
+        case 'reject': await memberService.reject(memberId, actorId); return
+        case 'suspend': await memberService.suspend(memberId, actorId); return
+        case 'activate': await memberService.activate(memberId, actorId); return
+        case 'remove': await memberService.remove(memberId, actorId); return
       }
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryScopes.allMembers }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryScopes.allMembers })
+      queryClient.invalidateQueries({ queryKey: queryScopes.allAudit })
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications() })
+    },
   })
 }
 
 export function useBulkMemberAction() {
   const queryClient = useQueryClient()
+  const actorId = useActorId()
   return useMutation({
     mutationFn: ({ ids, action }: { ids: string[]; action: 'approve' | 'reject' | 'suspend' | 'activate' }) =>
-      memberService.bulk(ids, action),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryScopes.allMembers }),
+      memberService.bulk(ids, action, actorId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryScopes.allMembers })
+      queryClient.invalidateQueries({ queryKey: queryScopes.allAudit })
+    },
+  })
+}
+
+export function useInviteMember() {
+  const queryClient = useQueryClient()
+  const actorId = useActorId()
+  return useMutation({
+    mutationFn: (input: { email: string; roleId: RoleId; workspaceId: string; teamId?: string }) =>
+      memberService.invite(input, actorId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryScopes.allInvitations })
+      queryClient.invalidateQueries({ queryKey: queryScopes.allAudit })
+    },
   })
 }
 
 export function useInvitationAction() {
   const queryClient = useQueryClient()
+  const actorId = useActorId()
   return useMutation({
     mutationFn: ({ invitationId, action }: { invitationId: string; action: 'resend' | 'cancel' }) =>
       action === 'resend'
-        ? memberService.resendInvitation(invitationId)
-        : memberService.cancelInvitation(invitationId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryScopes.allInvitations }),
+        ? memberService.resendInvitation(invitationId, actorId)
+        : memberService.cancelInvitation(invitationId, actorId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryScopes.allInvitations })
+      queryClient.invalidateQueries({ queryKey: queryScopes.allAudit })
+    },
+  })
+}
+
+export function useCreateTeam() {
+  const queryClient = useQueryClient()
+  const actorId = useActorId()
+  return useMutation({
+    mutationFn: (input: {
+      name: string; workspaceId: string; description?: string
+      releaseManagerId?: string; qaLeadId?: string
+    }) => memberService.createTeam(input, actorId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryScopes.allTeams })
+      queryClient.invalidateQueries({ queryKey: queryScopes.allAudit })
+    },
+  })
+}
+
+export function useUpdateTeam() {
+  const queryClient = useQueryClient()
+  const actorId = useActorId()
+  return useMutation({
+    mutationFn: ({ teamId, patch }: { teamId: string; patch: Partial<Team> }) =>
+      memberService.updateTeam(teamId, patch, actorId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryScopes.allTeams })
+      queryClient.invalidateQueries({ queryKey: queryScopes.allAudit })
+    },
+  })
+}
+
+export function useDeleteTeam() {
+  const queryClient = useQueryClient()
+  const actorId = useActorId()
+  return useMutation({
+    mutationFn: (teamId: string) => memberService.deleteTeam(teamId, actorId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryScopes.allTeams })
+      queryClient.invalidateQueries({ queryKey: queryScopes.allMembers })
+      queryClient.invalidateQueries({ queryKey: queryScopes.allAudit })
+    },
+  })
+}
+
+export function useSetTeamMembers() {
+  const queryClient = useQueryClient()
+  const actorId = useActorId()
+  return useMutation({
+    mutationFn: ({ teamId, memberIds }: { teamId: string; memberIds: string[] }) =>
+      memberService.setTeamMembers(teamId, memberIds, actorId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryScopes.allTeams })
+      queryClient.invalidateQueries({ queryKey: queryScopes.allMembers })
+      queryClient.invalidateQueries({ queryKey: queryScopes.allAudit })
+    },
   })
 }
 

@@ -1,4 +1,4 @@
-import { mockNotifications } from '@/lib/mock-data'
+import { mockDb } from '@/lib/mock-db'
 import type { Notification, NotificationLevel } from '@/lib/types'
 import { resolve, resolveMutation } from './transport'
 
@@ -23,16 +23,19 @@ export interface ChannelRoute {
  */
 export const notificationService = {
   list: (signal?: AbortSignal) =>
-    resolve<Notification[]>({ path: '/api/notifications', signal, mock: () => mockNotifications }),
+    resolve<Notification[]>({ path: '/api/notifications', signal, mock: () => mockDb.notifications() }),
 
   markRead: (notificationId: string) =>
     resolveMutation<{ ok: true }>({
       path: `/api/notifications/${notificationId}/read`,
-      mock: () => ({ ok: true }),
+      mock: () => mockDb.markNotificationRead(notificationId),
     }),
 
   markAllRead: () =>
-    resolveMutation<{ ok: true }>({ path: '/api/notifications/read-all', mock: () => ({ ok: true }) }),
+    resolveMutation<{ ok: true }>({
+      path: '/api/notifications/read-all',
+      mock: () => mockDb.markAllNotificationsRead(),
+    }),
 
   listRoutes: (workspaceId?: string, signal?: AbortSignal) =>
     resolve<ChannelRoute[]>({

@@ -76,6 +76,13 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Everything except Next internals, the favicon and files in /public.
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)'],
+  // Everything except Next internals, static assets and /api.
+  //
+  // API routes are excluded deliberately: their callers are machines, not
+  // sessions. The cron trigger carries a bearer secret and has no cookie, so a
+  // session redirect here would 307 every scheduled run to the login page.
+  // Each route handler authorizes its own caller.
+  matcher: [
+    '/((?!api/|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
+  ],
 }
