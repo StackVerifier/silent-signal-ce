@@ -8,6 +8,7 @@ import { useState } from 'react'
 import { useNow } from '@/hooks/use-now'
 import { Breadcrumb } from './breadcrumb'
 import { NotificationCenter } from '@/components/notifications/notification-center'
+import { AccountMenu } from './account-menu'
 
 /**
  * "3m ago", re-rendered on a ticking clock rather than by writing state from an
@@ -94,6 +95,9 @@ export function Topbar({ title, trailing }: { title: string; trailing?: string }
 
         <NotificationCenter />
 
+        <div className="w-px h-6 bg-[#1E2D4A]" aria-hidden="true" />
+
+        <AccountMenu />
       </div>
     </header>
   )
