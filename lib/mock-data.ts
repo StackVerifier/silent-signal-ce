@@ -1,6 +1,7 @@
 import type {
   DashboardMetrics, ServiceHealth, LiveSignal,
-  Sprint, Release, QAItem, QATester, Rule, Signal
+  Sprint, Release, QAItem, QATester, Rule, Signal,
+  User, Workspace, WorkspaceMember, Notification, AuditLog, Integration, BillingInfo
 } from './types'
 
 // ─── Dashboard Metrics ────────────────────────────────────────────────────────
@@ -143,7 +144,7 @@ export const sprints: Sprint[] = [
   },
 ]
 
-// ─── Releases ─────────────────────────────────────────────────────────────────
+// ─── Releases ───────────────────────────────────────────────────��─────────────
 
 export const releases: Release[] = [
   {
@@ -371,3 +372,205 @@ export const riskTimeline: RiskTimelineEvent[] = [
   { id: 't9', date: new Date('2026-07-18T09:00:00'), type: 'release', title: 'Platform v2.3 released', description: 'Successfully shipped 14 features', riskDelta: -30, severity: 'low' },
   { id: 't10', date: new Date('2026-07-16T15:00:00'), type: 'risk-decrease', title: 'Sprint 41 completed', description: '94% completion rate achieved', riskDelta: -20, service: 'Platform', severity: 'low' },
 ]
+
+// ─── Users ────────────────────────────────────────────────────────────────────
+
+export const mockUsers: User[] = [
+  {
+    id: 'user-1',
+    email: 'alice@company.com',
+    name: 'Alice Chen',
+    role: 'admin',
+    avatar: 'AC',
+    createdAt: new Date('2025-01-15'),
+    lastLoginAt: new Date(Date.now() - 3600000),
+    preferences: { theme: 'light', emailNotifications: true, desktopNotifications: true, language: 'en' },
+  },
+  {
+    id: 'user-2',
+    email: 'bob@company.com',
+    name: 'Bob Martinez',
+    role: 'manager',
+    avatar: 'BM',
+    createdAt: new Date('2025-02-20'),
+    lastLoginAt: new Date(Date.now() - 7200000),
+    preferences: { theme: 'dark', emailNotifications: true, desktopNotifications: false, language: 'en' },
+  },
+  {
+    id: 'user-3',
+    email: 'charlie@company.com',
+    name: 'Charlie Patel',
+    role: 'lead',
+    avatar: 'CP',
+    createdAt: new Date('2025-03-10'),
+    lastLoginAt: new Date(Date.now() - 86400000),
+    preferences: { theme: 'light', emailNotifications: true, desktopNotifications: true, language: 'en' },
+  },
+  {
+    id: 'user-4',
+    email: 'diana@company.com',
+    name: 'Diana Lopez',
+    role: 'member',
+    avatar: 'DL',
+    createdAt: new Date('2025-04-05'),
+    lastLoginAt: new Date(Date.now() - 172800000),
+    preferences: { theme: 'light', emailNotifications: false, desktopNotifications: true, language: 'en' },
+  },
+]
+
+// ─── Workspace & Members ──────────────────────────────────────────────────────
+
+export const mockWorkspace: Workspace = {
+  id: 'ws-1',
+  name: 'Acme Corp',
+  slug: 'acme-corp',
+  logo: 'AC',
+  description: 'Risk monitoring for product delivery',
+  owner: mockUsers[0],
+  members: mockUsers.map((user, idx) => ({
+    id: `wm-${idx + 1}`,
+    userId: user.id,
+    user,
+    role: user.role,
+    joinedAt: user.createdAt,
+    invitedBy: idx === 0 ? undefined : mockUsers[0],
+  })),
+  createdAt: new Date('2025-01-15'),
+  updatedAt: new Date(Date.now() - 86400000),
+  settings: {
+    isPrivate: false,
+    twoFactorRequired: false,
+    ssoEnabled: true,
+    auditLoggingEnabled: true,
+    dataRetentionDays: 90,
+  },
+}
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+export const mockNotifications: Notification[] = [
+  {
+    id: 'notif-1',
+    userId: 'user-1',
+    workspaceId: 'ws-1',
+    type: 'risk',
+    level: 'critical',
+    title: 'Critical Risk Alert',
+    message: 'Payment Service risk score jumped to 87 — multiple QA blockers detected',
+    link: '/risk-timeline',
+    read: false,
+    createdAt: new Date(Date.now() - 600000),
+  },
+  {
+    id: 'notif-2',
+    userId: 'user-1',
+    workspaceId: 'ws-1',
+    type: 'sprint',
+    level: 'high',
+    title: 'Sprint Alert',
+    message: 'Sprint 42 velocity trending 22% below last sprint',
+    link: '/sprint',
+    read: false,
+    createdAt: new Date(Date.now() - 1800000),
+  },
+  {
+    id: 'notif-3',
+    userId: 'user-1',
+    workspaceId: 'ws-1',
+    type: 'release',
+    level: 'medium',
+    title: 'Release Status Update',
+    message: 'Platform v2.4 now at 78% completion — on track for next Friday',
+    link: '/release',
+    read: true,
+    createdAt: new Date(Date.now() - 3600000),
+  },
+]
+
+// ─── Audit Logs ───────────────────────────────────────────────────────────────
+
+export const mockAuditLogs: AuditLog[] = [
+  {
+    id: 'audit-1',
+    workspaceId: 'ws-1',
+    userId: 'user-1',
+    user: mockUsers[0],
+    action: 'update',
+    resource: 'rule',
+    resourceId: 'rule-1',
+    changes: { 'enabled': { before: false, after: true } },
+    createdAt: new Date(Date.now() - 3600000),
+  },
+  {
+    id: 'audit-2',
+    workspaceId: 'ws-1',
+    userId: 'user-2',
+    user: mockUsers[1],
+    action: 'invite',
+    resource: 'member',
+    resourceId: 'wm-4',
+    metadata: { invitedEmail: 'diana@company.com' },
+    createdAt: new Date(Date.now() - 86400000),
+  },
+  {
+    id: 'audit-3',
+    workspaceId: 'ws-1',
+    userId: 'user-1',
+    user: mockUsers[0],
+    action: 'update',
+    resource: 'workspace',
+    resourceId: 'ws-1',
+    changes: { 'twoFactorRequired': { before: false, after: false }, 'ssoEnabled': { before: false, after: true } },
+    createdAt: new Date(Date.now() - 172800000),
+  },
+]
+
+// ─── Integrations ─────────────────────────────────────────────────────────────
+
+export const mockIntegrations: Integration[] = [
+  {
+    id: 'int-1',
+    workspaceId: 'ws-1',
+    type: 'jira',
+    name: 'Jira Cloud',
+    enabled: true,
+    config: { baseUrl: 'https://acme.atlassian.net', apiKey: '***' },
+    lastSyncAt: new Date(Date.now() - 300000),
+    createdAt: new Date('2025-02-01'),
+  },
+  {
+    id: 'int-2',
+    workspaceId: 'ws-1',
+    type: 'slack',
+    name: 'Slack Notifications',
+    enabled: true,
+    config: { webhookUrl: '***', channelId: 'C123456' },
+    lastSyncAt: new Date(Date.now() - 600000),
+    createdAt: new Date('2025-02-15'),
+  },
+  {
+    id: 'int-3',
+    workspaceId: 'ws-1',
+    type: 'github',
+    name: 'GitHub',
+    enabled: false,
+    config: { org: 'acme-org', apiKey: '***' },
+    createdAt: new Date('2025-03-10'),
+  },
+]
+
+// ─── Billing ──────────────────────────────────────────────────────────────────
+
+export const mockBillingInfo: BillingInfo = {
+  workspaceId: 'ws-1',
+  plan: 'pro',
+  status: 'active',
+  currentPeriodStart: new Date('2026-06-25'),
+  currentPeriodEnd: new Date('2026-07-25'),
+  nextBillingDate: new Date('2026-07-25'),
+  usage: {
+    rules: 24,
+    team: 4,
+    storage: 42,
+  },
+}
