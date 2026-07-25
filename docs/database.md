@@ -1,12 +1,36 @@
 # Data storage
 
-Two SQLite databases, with different lifecycles. Keeping them apart is what
-makes SQLite viable here at all.
+## Choosing a database
 
-| File | Written at runtime | Committed | Purpose |
+`DATABASE_URL` decides, and nothing else changes:
+
+```bash
+# .env.local — unset: local SQLite, nothing to install
+# DATABASE_URL=
+
+# set: Postgres, and the SQLite file is not touched
+DATABASE_URL=postgres://user:password@localhost:5432/silentsignal
+```
+
+`lib/db/driver.ts` is the only module that knows which is in play. Repositories
+issue the same SQL either way; `?` placeholders are rewritten to `$1, $2, …`
+for Postgres, and the two dialect differences that matter — `INSERT OR IGNORE`
+→ `ON CONFLICT DO NOTHING`, and integer-vs-boolean parameters — are handled
+there too.
+
+Both schemas live side by side and are applied on first connection:
+`db/app-schema.sql` and `db/app-schema.postgres.sql`. The Postgres one differs
+only where Postgres requires it: real `BOOLEAN` and `TIMESTAMPTZ`, `BIGSERIAL`
+for the audit id. Table and column names are identical.
+
+`pnpm db:seed` seeds whichever database `DATABASE_URL` selects.
+
+## Two databases, different lifecycles
+
+| Store | Written at runtime | Committed | Purpose |
 |---|---|---|---|
-| `data/help.db` | No | Yes | Help centre content, opened read-only |
-| `data/silent-signal.db` | **Yes** | No | Members, teams, invitations, webhooks, notifications, audit, delivery data |
+| `data/help.db` (always SQLite) | No | Yes | Help centre content, opened read-only |
+| Application database | **Yes** | No | Members, teams, invitations, webhooks, notifications, audit, delivery data |
 
 ## The serverless caveat, stated plainly
 
@@ -18,10 +42,23 @@ then vanish.
 
 `data/help.db` is unaffected: it is read-only and ships with the deployment.
 
-Moving to a hosted database is a change to `lib/db/app.ts` and the repositories
-in `lib/db/repositories.ts`. Nothing above that layer — route handlers,
-services, hooks, components — refers to SQLite, so the swap does not reach them.
-`docs/rbac-architecture.md` carries the PostgreSQL schema this one mirrors.
+Point `DATABASE_URL` at a hosted Postgres and the caveat disappears — that is
+the supported path for any deployment that needs data to survive.
+
+## Passwords
+
+Hashed with scrypt (`lib/auth/password.ts`), which is memory-hard and ships in
+Node's standard library — no native module to compile and nothing to keep
+patched. The stored format is `scrypt$N$r$p$salt$hash`; parameters travel with
+the hash, so the cost can be raised later without invalidating existing
+passwords, and `needsRehash()` upgrades one transparently at next sign-in.
+
+Login hashes even when the account does not exist, so response time does not
+reveal which addresses are registered, and both failure modes return the same
+message.
+
+The seeded administrator is flagged `must_change_password`, which puts an
+unmissable banner in the app until a real password is set.
 
 ## Seeding
 

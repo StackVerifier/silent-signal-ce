@@ -5,8 +5,8 @@ import { resolveJiraAuth } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
 
-function status(context: { workspaceId: string }) {
-  const jira = integrationRepo.list(context.workspaceId).find((item) => item.type === 'jira')
+async function status(context: { workspaceId: string }) {
+  const jira = (await integrationRepo.list(context.workspaceId)).find((item) => item.type === 'jira')
   const configured = Boolean(resolveJiraAuth())
 
   return {
@@ -22,11 +22,11 @@ function status(context: { workspaceId: string }) {
   }
 }
 
-export const GET = route({ permission: PERMISSIONS.INTEGRATION_READ }, (context) => status(context))
+export const GET = route({ permission: PERMISSIONS.INTEGRATION_READ }, async (context) => status(context))
 
-export const POST = route({ permission: PERMISSIONS.INTEGRATION_WRITE }, (context) => {
-  integrationRepo.recordSync(context.workspaceId, 'jira')
-  notificationRepo.create({
+export const POST = route({ permission: PERMISSIONS.INTEGRATION_WRITE }, async (context) => {
+  await integrationRepo.recordSync(context.workspaceId, 'jira')
+  await notificationRepo.create({
     memberId: context.memberId,
     workspaceId: context.workspaceId,
     type: 'system',

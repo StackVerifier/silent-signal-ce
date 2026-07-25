@@ -5,5 +5,5 @@ import type { Signal } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 
-export const GET = route({ permission: PERMISSIONS.RISK_READ }, (context) =>
+export const GET = route({ permission: PERMISSIONS.RISK_READ }, async (context) =>
   deliveryRepo.signals<Signal>(context.workspaceId, 'signal'))

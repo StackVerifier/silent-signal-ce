@@ -6,8 +6,8 @@ import { resolveJiraAuth } from '@/lib/env'
 
 export const dynamic = 'force-dynamic'
 
-export const GET = route({ permission: PERMISSIONS.INTEGRATION_READ }, (context) =>
-  integrationRepo.list(context.workspaceId).find((item) => item.type === 'jira') ?? null)
+export const GET = route({ permission: PERMISSIONS.INTEGRATION_READ }, async (context) =>
+  (await integrationRepo.list(context.workspaceId)).find((item) => item.type === 'jira') ?? null)
 
 const actionSchema = z.object({ action: z.enum(['connect', 'disconnect']) })
 
@@ -15,12 +15,12 @@ export const POST = route({ permission: PERMISSIONS.INTEGRATION_WRITE }, async (
   const { action } = await parseBody(request, actionSchema)
 
   if (action === 'disconnect') {
-    integrationRepo.setEnabled(context.workspaceId, 'jira', false, context.memberId, context.organizationId)
+    await integrationRepo.setEnabled(context.workspaceId, 'jira', false, context.memberId, context.organizationId)
     return { ok: true }
   }
 
   const auth = resolveJiraAuth()
-  integrationRepo.setEnabled(context.workspaceId, 'jira', true, context.memberId, context.organizationId)
+  await integrationRepo.setEnabled(context.workspaceId, 'jira', true, context.memberId, context.organizationId)
 
   // With OAuth configured the browser is sent to Atlassian for consent; with an
   // API token there is nothing to consent to, so the connection is live now.

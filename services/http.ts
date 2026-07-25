@@ -50,6 +50,34 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * ISO-8601 timestamps, as JSON.stringify emits for a Date.
+ * Anchored at both ends so a description that merely contains a date is not
+ * silently converted into one.
+ */
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/
+
+/**
+ * Revives date strings into Date objects on the way in.
+ *
+ * JSON has no date type, so every Date the server sends arrives as a string.
+ * Without this, `createdAt.getTime()` throws at the call site — and it throws
+ * far away from the cause, in whichever component happens to touch the field
+ * first. Converting once at the transport boundary means the domain types stay
+ * true: if `Member.createdAt` says Date, it is a Date.
+ */
+function reviveDates<T>(value: T): T {
+  if (typeof value === 'string') {
+    return (ISO_DATE.test(value) ? new Date(value) : value) as unknown as T
+  }
+  if (Array.isArray(value)) return value.map(reviveDates) as unknown as T
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    for (const key of Object.keys(record)) record[key] = reviveDates(record[key])
+  }
+  return value
+}
+
 export interface Paginated<T> {
   data: T[]
   pageInfo: { nextCursor: string | null; hasMore: boolean }
@@ -123,7 +151,8 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
         })
       }
 
-      return response.status === 204 ? (undefined as T) : ((await response.json()) as T)
+      if (response.status === 204) return undefined as T
+      return reviveDates((await response.json()) as T)
     } catch (error) {
       const normalized =
         error instanceof ApiError

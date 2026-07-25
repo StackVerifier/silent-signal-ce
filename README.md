@@ -13,11 +13,21 @@ pnpm dev
 
 Open <http://localhost:3000>. You will land on the login screen.
 
-`predev` builds the help database first, so a fresh clone works with no extra step and editing help content is reflected on the next `pnpm dev`.
+`predev` builds both databases first, so a fresh clone works with no extra step.
 
 ### Sign in
 
-The app ships with demo accounts — the login screen offers one-click role switching. Password is `admin123` for all of them.
+Sign in as the administrator:
+
+| | |
+|---|---|
+| Email | `admin@silentsignal.local` |
+| Password | `ChangeMe123!` |
+
+The app insists you replace that password on first use — it is flagged as a
+handed-out one, so a banner sits at the top until you change it.
+
+There are also demo personas for seeing each role's view, password `admin123`:
 
 | Account | Role | Use it to see |
 |---|---|---|
@@ -29,16 +39,17 @@ The app ships with demo accounts — the login screen offers one-click role swit
 | `faruk@boyner.com.tr` | Pending | The locked, skeleton-only experience |
 | `hakan@boyner.com.tr` | Suspended | The account-suspended screen |
 
-> Authentication is mock: credentials are checked in the browser and the session cookie is not `httpOnly`. Fine for a demo, not for real users. `SessionClaims` is already shaped as the JWT payload, so moving to server-issued sessions does not change middleware or the guards.
+> Sessions are issued server-side and the cookie is `httpOnly`; passwords are verified against a stored scrypt hash. What is still missing for production is the surrounding lifecycle — email verification, password reset, rate limiting on the login endpoint.
 
 ## All commands
 
 | Command | What it does |
 |---|---|
-| `pnpm dev` | Development server, seeds the help database first |
-| `pnpm build` | Production build, seeds the help database first |
+| `pnpm dev` | Development server, seeds both databases first |
+| `pnpm build` | Production build, seeds both databases first |
 | `pnpm start` | Serve a production build |
-| `pnpm db:seed` | Rebuild `data/help.db` from `db/content/help.ts` |
+| `pnpm db:seed` | Create both databases if missing (never overwrites app data) |
+| `pnpm db:reset` | Rebuild the application database from seed content (destructive) |
 | `pnpm typecheck` | `tsc --noEmit` |
 | `pnpm lint` | ESLint |
 
@@ -56,7 +67,9 @@ In production the endpoint refuses every request unless `CRON_SECRET` is set —
 
 ## Configuration
 
-Copy `.env.example` to `.env.local` and fill in what you need. Nothing is required to run the demo: `NEXT_PUBLIC_API_MODE` defaults to `mock`, which resolves every service from in-memory fixtures.
+Copy `.env.example` to `.env.local` and fill in what you need. Nothing is required to run locally.
+
+**Database.** Leave `DATABASE_URL` unset and the app uses a local SQLite file. Set it to a `postgres://` URL and it uses Postgres instead — no code change, and `pnpm db:seed` seeds whichever one is selected. See [`docs/database.md`](docs/database.md).
 
 Anything prefixed `NEXT_PUBLIC_` is inlined into the browser bundle, so credentials never carry that prefix — they are read server-side through `serverEnv()`.
 
@@ -67,10 +80,12 @@ app/                 routes; (dashboard) and (settings) share one AppShell
 components/          UI, split by feature (rbac, members, teams, help, layout)
 lib/rbac/            permissions, roles, access engine, navigation registry
 lib/query/           TanStack Query client, key registry, hooks
-lib/db/              read-only SQLite access for help content
-services/            one module per domain, all behind a single transport
-db/content/          help centre content — source of truth for data/help.db
-scripts/             build-time seeding
+lib/db/              driver (SQLite or Postgres), repositories, encryption
+lib/auth/            password hashing
+services/            one module per domain — thin HTTP clients
+app/api/             route handlers; the security boundary
+db/content/          seed content and help articles
+scripts/             seeding
 docs/                architecture notes
 ```
 
@@ -78,18 +93,20 @@ Three ideas carry most of the design:
 
 **Permissions, not roles.** A role is only a bundle of permissions, and no screen branches on a role name. That is what lets a customer define their own roles without a product change.
 
-**One seam for data.** Every service call goes through `services/transport.ts`, which either resolves a fixture or issues the HTTP request depending on `NEXT_PUBLIC_API_MODE`. Components cannot tell the difference, so going live is a configuration change rather than a refactor.
+**One seam for storage.** `lib/db/driver.ts` is the only module that knows whether it is talking to SQLite or Postgres. Repositories issue the same SQL either way, so switching is an environment variable rather than a refactor.
 
 **Status outranks permission.** A pending member keeps their granted permissions on paper but resolves to an empty effective set, so they see the whole product rendered as skeletons and no data path can leak.
 
 ## Documentation
 
 - [`docs/rbac-architecture.md`](docs/rbac-architecture.md) — tenancy model, PostgreSQL schema with row-level security, API contracts, SSO/SCIM readiness
+- [`docs/database.md`](docs/database.md) — SQLite vs Postgres, the serverless caveat, password hashing, credential encryption
 - [`docs/scheduler.md`](docs/scheduler.md) — job definitions, the two drivers, and why it is safe without Redis
 - [`AUDIT.md`](AUDIT.md) — the technical audit this work started from
 
 ## Current limitations
 
-- **Auth and tenant data are mock.** Members, teams and invitations live in a browser-backed store; they survive a reload, not a different browser.
-- **Mutations are real but local.** `resolveMutation` is explicit that mock-mode writes do not reach a server.
+- **SQLite does not persist on serverless.** Use `DATABASE_URL` with a hosted Postgres for any deployment that needs data to survive. `docs/database.md` explains why.
+- **Auth lifecycle is incomplete.** Passwords are hashed and sessions are server-issued, but there is no email verification, password reset or login rate limiting yet.
+- **Jira sync is not implemented.** The integration connects and the endpoints exist; the sync itself returns an honest "credentials not configured" rather than inventing data.
 - **Billing and support forms are inert.** Both need a real backend, and wiring them to fixtures would be theatre.

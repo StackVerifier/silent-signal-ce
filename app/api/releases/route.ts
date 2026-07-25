@@ -5,5 +5,5 @@ import type { Release } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 
-export const GET = route({ permission: PERMISSIONS.RELEASE_READ }, (context) =>
+export const GET = route({ permission: PERMISSIONS.RELEASE_READ }, async (context) =>
   deliveryRepo.releases<Release>(context.workspaceId))

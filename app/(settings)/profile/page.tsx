@@ -5,11 +5,14 @@ import { motion } from 'framer-motion'
 import { Mail, Calendar, Save, ShieldCheck } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
 import { useToast } from '@/components/ui/toast'
+import { useState } from 'react'
+import { ChangePasswordDialog } from '@/components/settings/change-password-dialog'
 import { MemberStatusBadge } from '@/components/members/member-status-badge'
 
 export default function ProfilePage() {
   const { member, role, organization } = useAuth()
   const toast = useToast()
+  const [passwordOpen, setPasswordOpen] = useState(false)
   if (!member) return null
 
   return (
@@ -96,9 +99,17 @@ export default function ProfilePage() {
             className="p-6 rounded-lg bg-[#0F1824] border border-[#1E2D4A]"
           >
             <h2 className="text-lg font-semibold text-[#E2E8F0] mb-4">Security</h2>
-            <button className="px-4 py-2 bg-[#6C63FF]/10 hover:bg-[#6C63FF]/20 text-[#6C63FF] rounded-lg font-medium text-sm transition-colors">
+            <button
+              onClick={() => setPasswordOpen(true)}
+              className="px-4 py-2 bg-[#6C63FF]/10 hover:bg-[#6C63FF]/20 text-[#6C63FF] rounded-lg font-medium text-sm transition-colors"
+            >
               Change Password
             </button>
+            {member.mustChangePassword && (
+              <p className="text-[11px] text-[#F59E0B] mt-2">
+                This account still uses the password it was created with.
+              </p>
+            )}
           </motion.div>
 
           {/* Save */}
@@ -116,6 +127,8 @@ export default function ProfilePage() {
           </motion.button>
         </div>
       </div>
+
+      <ChangePasswordDialog open={passwordOpen} onClose={() => setPasswordOpen(false)} />
     </div>
   )
 }

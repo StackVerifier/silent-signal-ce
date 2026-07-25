@@ -17,11 +17,11 @@ const patchSchema = z.object({
 
 export const PATCH = route({ permission: PERMISSIONS.TEAMS_WRITE }, async (context, request) => {
   const patch = await parseBody(request, patchSchema)
-  return teamRepo.update(teamId(request), patch, context.memberId)
+  return await teamRepo.update(teamId(request), patch, context.memberId)
 })
 
-export const DELETE = route({ permission: PERMISSIONS.TEAMS_DELETE }, (context, request) => {
-  teamRepo.remove(teamId(request), context.memberId)
+export const DELETE = route({ permission: PERMISSIONS.TEAMS_DELETE }, async (context, request) => {
+  await teamRepo.remove(teamId(request), context.memberId)
   return { ok: true }
 })
 
@@ -29,6 +29,6 @@ const membersSchema = z.object({ memberIds: z.array(z.string()) })
 
 export const POST = route({ permission: PERMISSIONS.TEAMS_WRITE }, async (context, request) => {
   const { memberIds } = await parseBody(request, membersSchema)
-  teamRepo.setMembers(teamId(request), memberIds, context.memberId)
+  await teamRepo.setMembers(teamId(request), memberIds, context.memberId)
   return { ok: true }
 })

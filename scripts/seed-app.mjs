@@ -9,12 +9,29 @@ import { DatabaseSync } from 'node:sqlite'
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { randomBytes, scrypt } from 'node:crypto'
+import { promisify } from 'node:util'
+
+const scryptAsync = promisify(scrypt)
+
+/** Mirrors lib/auth/password.ts — the seed cannot import a server-only module. */
+async function hashPassword(password) {
+  const salt = randomBytes(16)
+  const derived = await scryptAsync(password.normalize('NFKC'), salt, 64)
+  return ['scrypt', 32768, 8, 1, salt.toString('base64'), derived.toString('base64')].join('$')
+}
+
+const DEMO_PASSWORD = process.env.SEED_PASSWORD ?? 'admin123'
+const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL ?? 'admin@silentsignal.local'
+const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD ?? 'ChangeMe123!'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const dbPath = resolve(root, 'data/silent-signal.db')
 const force = process.argv.includes('--force')
 
-if (existsSync(dbPath) && !force) {
+const usePostgres = Boolean(process.env.DATABASE_URL)
+
+if (!usePostgres && existsSync(dbPath) && !force) {
   console.log('silent-signal.db already exists — leaving it alone (use --force to reset)')
   process.exit(0)
 }
@@ -22,19 +39,80 @@ if (existsSync(dbPath) && !force) {
 const tenancy = await import(pathToFileURL(resolve(root, 'db/content/seed-tenancy.ts')).href)
 const delivery = await import(pathToFileURL(resolve(root, 'db/content/seed-delivery.ts')).href)
 
-mkdirSync(dirname(dbPath), { recursive: true })
-if (force) {
-  // WAL leaves sidecar files; removing only the main file would resurrect rows.
-  for (const suffix of ['', '-wal', '-shm']) rmSync(`${dbPath}${suffix}`, { force: true })
+/**
+ * Minimal execute/prepare shim so the rest of this script does not care which
+ * database it is talking to. `?` placeholders are translated for Postgres.
+ */
+async function openTarget() {
+  if (!usePostgres) {
+    mkdirSync(dirname(dbPath), { recursive: true })
+    if (force) {
+      // WAL leaves sidecar files; removing only the main file would resurrect rows.
+      for (const suffix of ['', '-wal', '-shm']) rmSync(`${dbPath}${suffix}`, { force: true })
+    }
+    const db = new DatabaseSync(dbPath)
+    db.exec(readFileSync(resolve(root, 'db/app-schema.sql'), 'utf8'))
+    return {
+      label: dbPath,
+      prepare: (sql) => ({ run: (...params) => db.prepare(sql).run(...params) }),
+      exec: (sql) => db.exec(sql),
+      count: (table) => db.prepare(`SELECT count(*) AS n FROM ${table}`).get().n,
+      close: () => db.close(),
+    }
+  }
+
+  const { Client } = await import('pg')
+  const client = new Client({ connectionString: process.env.DATABASE_URL })
+  await client.connect()
+  await client.query(readFileSync(resolve(root, 'db/app-schema.postgres.sql'), 'utf8'))
+  if (force) {
+    await client.query(`TRUNCATE organization, workspace, member, team, member_workspace,
+      member_team, invitation, integration, webhook_endpoint, notification, audit_log,
+      sprint, release, qa_item, qa_tester, rule, risk_event, signal, service_health,
+      dashboard_metrics, billing RESTART IDENTITY CASCADE`)
+  } else {
+    const existing = await client.query('SELECT count(*) AS n FROM member')
+    if (Number(existing.rows[0].n) > 0) {
+      console.log('Postgres database already has members — leaving it alone (use --force to reset)')
+      await client.end()
+      process.exit(0)
+    }
+  }
+
+  const positional = (sql) => {
+    let text = sql
+    if (/INSERT OR IGNORE/i.test(text)) {
+      text = text.replace(/INSERT OR IGNORE/gi, 'INSERT') + ' ON CONFLICT DO NOTHING'
+    }
+    let i = 0
+    return text.replace(/\?/g, () => `$${++i}`)
+  }
+  const queue = []
+  return {
+    label: 'postgres',
+    prepare: (sql) => ({ run: (...params) => queue.push([positional(sql), params]) }),
+    exec: async (sql) => { if (!['BEGIN', 'COMMIT', 'ROLLBACK', 'VACUUM'].includes(sql)) await client.query(sql) },
+    flush: async () => {
+      await client.query('BEGIN')
+      try {
+        for (const [text, params] of queue) await client.query(text, params)
+        await client.query('COMMIT')
+      } catch (error) {
+        await client.query('ROLLBACK')
+        throw error
+      }
+    },
+    count: async (table) => Number((await client.query(`SELECT count(*) AS n FROM ${table}`)).rows[0].n),
+    close: () => client.end(),
+  }
 }
 
-const db = new DatabaseSync(dbPath)
-db.exec(readFileSync(resolve(root, 'db/app-schema.sql'), 'utf8'))
+const db = await openTarget()
 
 const iso = (value) => (value ? new Date(value).toISOString() : null)
-const bit = (value) => (value ? 1 : 0)
+const bit = (value) => (usePostgres ? Boolean(value) : value ? 1 : 0)
 
-db.exec('BEGIN')
+await db.exec('BEGIN')
 try {
   const org = tenancy.seedOrganization
   db.prepare(
@@ -56,11 +134,15 @@ try {
       iso(ws.archivedAt))
   }
 
+  const demoHash = await hashPassword(DEMO_PASSWORD)
+  const adminHash = await hashPassword(ADMIN_PASSWORD)
+
   const insertMember = db.prepare(
     `INSERT INTO member (id, organization_id, user_id, email, name, avatar, role_id, status,
                          email_verified_at, invited_by_id, invited_at, approved_by_id,
-                         approved_at, last_active_at, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                         approved_at, last_active_at, password_hash, must_change_password,
+                         password_changed_at, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
   const linkWorkspace = db.prepare(
     'INSERT OR IGNORE INTO member_workspace (member_id, workspace_id) VALUES (?, ?)',
@@ -69,8 +151,20 @@ try {
     insertMember.run(member.id, member.organizationId, member.userId, member.email, member.name,
       member.avatar ?? null, member.roleId, member.status, iso(member.emailVerifiedAt),
       member.invitedById ?? null, iso(member.invitedAt), member.approvedById ?? null,
-      iso(member.approvedAt), iso(member.lastActiveAt), iso(member.createdAt))
+      iso(member.approvedAt), iso(member.lastActiveAt), demoHash, 0, iso(member.createdAt),
+      iso(member.createdAt))
     for (const workspaceId of member.workspaceIds) linkWorkspace.run(member.id, workspaceId)
+  }
+
+  // A dedicated administrator, separate from the demo personas: it is the
+  // account you actually sign in with, and it is flagged so the app insists on
+  // a real password before the handed-out one is used for anything.
+  const adminId = 'mem-admin'
+  insertMember.run(adminId, org.id, 'user-admin', ADMIN_EMAIL, 'Administrator', 'AD',
+    'org_owner', 'approved', new Date().toISOString(), null, null, null,
+    new Date().toISOString(), null, adminHash, 1, null, new Date().toISOString())
+  for (const ws of tenancy.seedWorkspaces) {
+    if (ws.status === 'active') linkWorkspace.run(adminId, ws.id)
   }
 
   // Teams reference members (release manager, QA lead), so they come after.
@@ -208,15 +302,19 @@ try {
   db.prepare('INSERT INTO billing (workspace_id, payload) VALUES (?, ?)')
     .run(ws1, JSON.stringify(delivery.seedBilling))
 
-  db.exec('COMMIT')
+  await db.exec('COMMIT')
+  if (db.flush) await db.flush()
 } catch (error) {
-  db.exec('ROLLBACK')
+  await db.exec('ROLLBACK')
   throw error
 }
 
-const count = (table) => db.prepare(`SELECT count(*) AS n FROM ${table}`).get().n
+const count = async (table) => db.count(table)
 console.log(
-  `silent-signal.db seeded — ${count('member')} members, ${count('team')} teams, ` +
-  `${count('rule')} rules, ${count('notification')} notifications, ${count('audit_log')} audit records`,
+  `${db.label} seeded — ${await count('member')} members, ${await count('team')} teams, ` +
+  `${await count('rule')} rules, ${await count('notification')} notifications, ` +
+  `${await count('audit_log')} audit records`,
 )
-db.close()
+console.log(`  admin: ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}  (must be changed on first sign-in)`)
+
+await db.close()

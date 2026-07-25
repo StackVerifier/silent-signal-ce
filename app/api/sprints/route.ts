@@ -5,5 +5,5 @@ import type { Sprint } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 
-export const GET = route({ permission: PERMISSIONS.SPRINT_READ }, (context) =>
+export const GET = route({ permission: PERMISSIONS.SPRINT_READ }, async (context) =>
   deliveryRepo.sprints<Sprint>(context.workspaceId))
