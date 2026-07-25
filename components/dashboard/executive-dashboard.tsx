@@ -8,7 +8,10 @@ import { RiskCard } from './risk-card'
 import { SectionCard, ScoreBar, SeverityDot } from './shared'
 import { MetricInfo } from '@/components/ui/tooltip'
 import { ActivityFeed } from './activity-feed'
-import { useDashboardSnapshot, useReleases, useSprints } from '@/lib/query/hooks'
+import { useDashboardSnapshot, useQaQueue, useReleases, useSprints } from '@/lib/query/hooks'
+import { riskCards } from '@/lib/dashboard/risk-cards'
+import { SkeletonCard } from '@/components/ui/skeleton'
+import { EmptyState } from './shared'
 
 const fadeUp = {
   hidden: { opacity: 0, y: 16 },
@@ -149,6 +152,59 @@ function TopMetrics() {
         </motion.div>
       ))}
     </motion.div>
+  )
+}
+
+/**
+ * The four headline cards, built from the same data the detail pages read.
+ *
+ * A card whose inputs have not arrived is omitted rather than rendered with
+ * zeros — on this screen a zero reads as a measurement, not as "unknown".
+ */
+function RiskCards() {
+  const now = useNow(60_000)
+  const snapshot = useDashboardSnapshot()
+  const releases = useReleases()
+  const sprints = useSprints()
+  const queue = useQaQueue()
+
+  const loading = snapshot.isLoading || releases.isLoading || sprints.isLoading || queue.isLoading
+  if (loading) {
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {[0, 1, 2, 3].map((index) => <SkeletonCard key={index} rows={2} />)}
+      </div>
+    )
+  }
+
+  const cards = riskCards({
+    release: releases.data?.[0],
+    sprint: sprints.data?.[0],
+    queue: queue.data,
+    services: snapshot.data?.serviceHealth,
+    metrics: snapshot.data?.metrics ?? undefined,
+    now,
+  })
+
+  if (cards.length === 0) {
+    return <EmptyState message="No risk signals yet — connect Jira or run a sync to populate this." />
+  }
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {cards.map((card) => (
+        <RiskCard
+          key={card.key}
+          title={card.title}
+          subtitle={card.subtitle}
+          score={card.score}
+          riskLevel={card.riskLevel}
+          trend={card.trend}
+          reasons={card.reasons}
+          href={card.href}
+        />
+      ))}
+    </div>
   )
 }
 
@@ -384,79 +440,28 @@ export function ExecutiveDashboard() {
       {/* Top metric tiles */}
       <TopMetrics />
 
-      {/* Main content: Risk cards + Radar */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Risk Cards — 2 col */}
+      {/*
+        Two columns, each a full stack, rather than one short row above another.
+        Previously the left column held only the four cards while the right held
+        the radar and the activity feed, so the grid row stretched to the taller
+        side and left a large empty rectangle under the cards — which reads as a
+        panel that failed to load rather than as deliberate space.
+      */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
         <div className="lg:col-span-2 space-y-4">
           <p className="text-[10px] font-semibold text-[#64748B] uppercase tracking-widest">Risk Intelligence</p>
+          <RiskCards />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <RiskCard
-              title="Release Risk"
-              subtitle="Platform v2.4"
-              score={82}
-              riskLevel="HIGH"
-              trend="up"
-              reasons={[
-                { rule: 'QA Wait > 5 days', impact: 40, value: '12 tasks waiting in QA' },
-                { rule: 'Critical Bug Reopen', impact: 25, value: '3 critical issues reopened' },
-                { rule: 'QA Capacity > 90%', impact: 15, value: 'QA team at 94% capacity' },
-              ]}
-              href="/release"
-            />
-            <RiskCard
-              title="Sprint Risk"
-              subtitle="Sprint 42 · Platform"
-              score={74}
-              riskLevel="MEDIUM"
-              trend="up"
-              reasons={[
-                { rule: 'Velocity drop 22%', impact: 30, value: 'Down from 82 to 67 pts' },
-                { rule: 'Mid-sprint additions', impact: 25, value: '5 issues added after start' },
-                { rule: 'Blocked issues', impact: 20, value: '3 blocked issues in sprint' },
-              ]}
-              href="/sprint"
-            />
-            <RiskCard
-              title="QA Queue Risk"
-              subtitle="18 items pending"
-              score={67}
-              riskLevel="MEDIUM"
-              trend="up"
-              reasons={[
-                { rule: 'QA Capacity > 90%', impact: 35, value: 'Team at 94% capacity' },
-                { rule: 'Wait > 3 days', impact: 25, value: '5 items over 3 day wait' },
-                { rule: 'Unassigned items', impact: 20, value: '4 items unassigned' },
-              ]}
-              href="/qa-queue"
-            />
-            <RiskCard
-              title="Service Risk"
-              subtitle="Payment Service"
-              score={87}
-              riskLevel="HIGH"
-              trend="up"
-              reasons={[
-                { rule: 'Blocked > 2 days', impact: 40, value: 'PAY-123 blocked 5 days' },
-                { rule: 'Critical unresolved', impact: 30, value: '2 critical open issues' },
-                { rule: 'Regression incomplete', impact: 17, value: 'Regression at 40%' },
-              ]}
-              href="/risk-timeline"
-            />
+            <SprintSnapshot />
+            <ReleaseSnapshot />
           </div>
         </div>
 
-        {/* Right column: radar + workspace activity */}
         <div className="space-y-4">
           <RiskRadar />
           <ActivityFeed limit={6} />
+          <LiveSignalsFeed />
         </div>
-      </div>
-
-      {/* Bottom row: Sprint + Release + Live Signals */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <SprintSnapshot />
-        <ReleaseSnapshot />
-        <LiveSignalsFeed />
       </div>
     </div>
   )

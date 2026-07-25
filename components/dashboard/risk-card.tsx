@@ -5,13 +5,14 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowRight, TrendingUp, TrendingDown, Minus, Info } from 'lucide-react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
-import type { RiskLevel, RiskReason } from '@/lib/types'
+import type { RiskLevel } from '@/lib/types'
+import type { CardReason } from '@/lib/dashboard/risk-cards'
 
 interface RiskCardProps {
   title: string
   score: number
   riskLevel: RiskLevel
-  reasons: RiskReason[]
+  reasons: CardReason[]
   href: string
   trend?: 'up' | 'down' | 'stable'
   subtitle?: string
@@ -131,22 +132,30 @@ export function RiskCard({ title, score, riskLevel, reasons, href, trend, subtit
                   <p className="text-[10px] font-semibold text-[#64748B] uppercase tracking-wider">Risk Factors</p>
                 </div>
                 {reasons.slice(0, 3).map((r, i) => (
-                  <div key={i} className="space-y-1">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-[#94A3B8]">{r.value}</span>
-                      <span className="text-[#64748B] font-mono">{r.impact}%</span>
+                  <div key={r.rule} className="space-y-1">
+                    <div className="flex items-start justify-between gap-2 text-xs">
+                      <span className="text-[#94A3B8] min-w-0">{r.value}</span>
+                      {/* The contribution bar appears only where the rule
+                          engine supplied a weight. Deriving one from a count
+                          would be inventing the decomposition this product
+                          exists to show. */}
+                      {r.impact !== undefined && (
+                        <span className="text-[#64748B] font-mono shrink-0">{r.impact}%</span>
+                      )}
                     </div>
-                    <div className="h-1 bg-[#1E2D4A] rounded-full overflow-hidden">
-                      <motion.div
-                        className="h-full rounded-full"
-                        style={{
-                          background: riskLevel === 'HIGH' ? '#EF4444' : riskLevel === 'MEDIUM' ? '#F59E0B' : '#22C55E',
-                        }}
-                        initial={{ width: 0 }}
-                        animate={{ width: `${r.impact}%` }}
-                        transition={{ duration: 0.5, delay: i * 0.1 }}
-                      />
-                    </div>
+                    {r.impact !== undefined && (
+                      <div className="h-1 bg-[#1E2D4A] rounded-full overflow-hidden">
+                        <motion.div
+                          className="h-full rounded-full"
+                          style={{
+                            background: riskLevel === 'HIGH' ? '#EF4444' : riskLevel === 'MEDIUM' ? '#F59E0B' : '#22C55E',
+                          }}
+                          initial={{ width: 0 }}
+                          animate={{ width: `${r.impact}%` }}
+                          transition={{ duration: 0.5, delay: i * 0.1 }}
+                        />
+                      </div>
+                    )}
                   </div>
                 ))}
                 <Link

@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { ChevronLeft, ChevronRight, Search, LogOut, Lock, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Search, Lock, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo } from 'react'
 import { useIsDesktop } from '@/hooks/use-media-query'
 import { usePersistentFlag } from '@/hooks/use-persistent-flag'
@@ -35,7 +35,7 @@ export function Sidebar() {
   const setCommandPaletteOpen = useDashboardStore((state) => state.setCommandPaletteOpen)
   const mobileNavOpen = useDashboardStore((state) => state.mobileNavOpen)
   const setMobileNavOpen = useDashboardStore((state) => state.setMobileNavOpen)
-  const { permissions, member, role, isGated, logout } = useAuth()
+  const { permissions, member, isGated } = useAuth()
   const isDesktop = useIsDesktop()
   // Expanded on the server, so the markup is deterministic; the stored
   // preference is read during the first client render.
@@ -188,38 +188,10 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* Footer — account, user, collapse */}
+      {/* Footer — account links and the collapse toggle. Identity and sign-out
+          moved to the header, beside the notification bell. */}
       <div className="border-t border-[#1E2D4A] px-2 py-2 space-y-0.5 flex-shrink-0">
         {accountItems.map(renderItem)}
-
-        {member && (
-          <div
-            className={cn(
-              'flex items-center gap-2.5 rounded-lg px-2 py-2',
-              !showLabels && 'justify-center',
-            )}
-          >
-            <div className="w-7 h-7 rounded-full bg-[#6C63FF]/20 border border-[#6C63FF]/40 flex items-center justify-center text-[10px] font-bold text-[#6C63FF] shrink-0">
-              {member.avatar ?? member.name.slice(0, 2).toUpperCase()}
-            </div>
-            {showLabels && (
-              <>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium text-[#E2E8F0] truncate">{member.name}</p>
-                  <p className="text-[10px] text-[#64748B] truncate">{role?.name}</p>
-                </div>
-                <button
-                  onClick={logout}
-                  aria-label="Sign out"
-                  title="Sign out"
-                  className="p-1.5 rounded-lg text-[#64748B] hover:text-[#E2E8F0] hover:bg-[#151D32] transition-colors shrink-0"
-                >
-                  <LogOut aria-hidden="true" className="w-3.5 h-3.5" />
-                </button>
-              </>
-            )}
-          </div>
-        )}
 
         <button
           onClick={toggleCollapsed}
