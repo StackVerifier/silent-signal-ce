@@ -4,10 +4,12 @@ import { SettingsPageHeader } from '@/components/settings/page-header'
 import { motion } from 'framer-motion'
 import { Mail, Calendar, Save, ShieldCheck } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
+import { useToast } from '@/components/ui/toast'
 import { MemberStatusBadge } from '@/components/members/member-status-badge'
 
 export default function ProfilePage() {
   const { member, role, organization } = useAuth()
+  const toast = useToast()
   if (!member) return null
 
   return (
@@ -101,6 +103,9 @@ export default function ProfilePage() {
 
           {/* Save */}
           <motion.button
+            onClick={() =>
+              toast.success('Preferences saved', 'Your profile settings have been updated.')
+            }
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.3 }}

@@ -6,18 +6,41 @@ import { Topbar } from '@/components/layout/topbar'
 import { PermissionGuard } from '@/components/rbac/permission-guard'
 import { EmptyState } from '@/components/states/data-states'
 import { SkeletonCard } from '@/components/ui/skeleton'
+import { useState } from 'react'
 import { useGatedQuery } from '@/hooks/use-gated-data'
-import { useTeams } from '@/lib/query/hooks'
+import { useDeleteTeam, useTeams, useWorkspaces } from '@/lib/query/hooks'
+import { TeamDialog } from '@/components/teams/team-dialog'
+import { useToast } from '@/components/ui/toast'
+import type { Team } from '@/lib/rbac/types'
 import { useAuth } from '@/lib/auth-context'
 import { PERMISSIONS } from '@/lib/rbac/permissions'
-import { mockMembers, mockWorkspaces } from '@/lib/mock-tenancy'
+import { mockDb } from '@/lib/mock-db'
 
 export default function TeamsPage() {
   const { can, workspace } = useAuth()
   const teams = useGatedQuery(useTeams(), { permission: PERMISSIONS.TEAMS_READ })
+  const workspaces = useWorkspaces()
+  const deleteTeam = useDeleteTeam()
+  const toast = useToast()
   const canWrite = can(PERMISSIONS.TEAMS_WRITE)
 
-  const grouped = mockWorkspaces
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [editing, setEditing] = useState<Team | null>(null)
+
+  const openCreate = () => { setEditing(null); setDialogOpen(true) }
+  const openEdit = (team: Team) => { setEditing(team); setDialogOpen(true) }
+
+  const removeTeam = async (team: Team) => {
+    if (!window.confirm(`Delete ${team.name}? Members stay in the workspace but lose this team.`)) return
+    try {
+      await deleteTeam.mutateAsync(team.id)
+      toast.success('Team deleted', `${team.name} has been removed.`)
+    } catch (error) {
+      toast.error('Could not delete team', error instanceof Error ? error.message : 'Please try again.')
+    }
+  }
+
+  const grouped = (workspaces.data ?? [])
     .filter((candidate) => candidate.status === 'active')
     .map((candidate) => ({
       workspace: candidate,
@@ -40,7 +63,10 @@ export default function TeamsPage() {
                 </p>
               </div>
               {canWrite && (
-                <button className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#6C63FF] hover:bg-[#5B52CC] text-white rounded-lg font-medium text-sm transition-colors">
+                <button
+                  onClick={openCreate}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#6C63FF] hover:bg-[#5B52CC] text-white rounded-lg font-medium text-sm transition-colors"
+                >
                   <Plus aria-hidden="true" className="w-4 h-4" />
                   Create team
                 </button>
@@ -59,7 +85,7 @@ export default function TeamsPage() {
                   icon={UsersRound}
                   title="No teams in this organization yet"
                   description="Create a team to assign release managers, QA leads and members to a workspace."
-                  actions={canWrite ? [{ label: 'Create team' }] : []}
+                  actions={canWrite ? [{ label: 'Create team', onClick: openCreate }] : []}
                 />
               </div>
             ) : (
@@ -76,9 +102,10 @@ export default function TeamsPage() {
 
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                     {group.teams.map((team, index) => {
-                      const members = mockMembers.filter((member) => member.teamIds.includes(team.id))
-                      const releaseManager = mockMembers.find((m) => m.id === team.releaseManagerId)
-                      const qaLead = mockMembers.find((m) => m.id === team.qaLeadId)
+                      const allMembers = mockDb.members()
+                      const members = allMembers.filter((member) => member.teamIds.includes(team.id))
+                      const releaseManager = allMembers.find((m) => m.id === team.releaseManagerId)
+                      const qaLead = allMembers.find((m) => m.id === team.qaLeadId)
 
                       return (
                         <motion.article
@@ -97,11 +124,22 @@ export default function TeamsPage() {
                             </div>
                             {canWrite && (
                               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity shrink-0">
-                                <button aria-label={`Edit ${team.name}`} title="Edit team" className="p-1.5 rounded-lg text-[#94A3B8] hover:bg-[#1E2D4A] transition-colors">
+                                <button
+                                  onClick={() => openEdit(team)}
+                                  aria-label={`Edit ${team.name}`}
+                                  title="Edit team"
+                                  className="p-1.5 rounded-lg text-[#94A3B8] hover:bg-[#1E2D4A] transition-colors"
+                                >
                                   <Pencil aria-hidden="true" className="w-3.5 h-3.5" />
                                 </button>
                                 {can(PERMISSIONS.TEAMS_DELETE) && (
-                                  <button aria-label={`Delete ${team.name}`} title="Delete team" className="p-1.5 rounded-lg text-[#EF4444] hover:bg-[#EF4444]/10 transition-colors">
+                                  <button
+                                    onClick={() => removeTeam(team)}
+                                    disabled={deleteTeam.isPending}
+                                    aria-label={`Delete ${team.name}`}
+                                    title="Delete team"
+                                    className="p-1.5 rounded-lg text-[#EF4444] hover:bg-[#EF4444]/10 disabled:opacity-50 transition-colors"
+                                  >
                                     <Trash2 aria-hidden="true" className="w-3.5 h-3.5" />
                                   </button>
                                 )}
@@ -135,8 +173,11 @@ export default function TeamsPage() {
                               )}
                             </div>
                             {canWrite && (
-                              <button className="text-[11px] font-medium text-[#6C63FF] hover:text-[#8B85FF] transition-colors">
-                                Manage members
+                              <button
+                                onClick={() => openEdit(team)}
+                                className="text-[11px] font-medium text-[#6C63FF] hover:text-[#8B85FF] transition-colors"
+                              >
+                                Manage team
                               </button>
                             )}
                           </div>
@@ -150,6 +191,8 @@ export default function TeamsPage() {
           </div>
         </div>
       </div>
+
+      <TeamDialog open={dialogOpen} onClose={() => setDialogOpen(false)} team={editing} />
     </PermissionGuard>
   )
 }

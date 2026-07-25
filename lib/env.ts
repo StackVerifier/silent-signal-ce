@@ -65,6 +65,9 @@ const serverSchema = z.object({
   SMTP_PASSWORD: z.string().min(1).optional(),
   EMAIL_FROM: z.string().min(1).optional(),
 
+  CRON_SECRET: z.string().min(16).optional(),
+  SCHEDULER_IN_PROCESS: z.enum(['true', 'false']).optional(),
+
   SESSION_SECRET: z.string().min(32).optional(),
   DATABASE_URL: z.string().url().optional(),
 })

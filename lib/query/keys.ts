@@ -50,4 +50,6 @@ export const queryScopes = {
   allInvitations: ['invitations'] as const,
   allJira: ['jira'] as const,
   allTeams: ['teams'] as const,
+  allAudit: ['audit'] as const,
+  allNotifications: ['notifications'] as const,
 }

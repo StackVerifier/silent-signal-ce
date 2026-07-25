@@ -1,6 +1,4 @@
-import {
-  mockInvitations, mockMembers, mockTeams, mockWorkspaces,
-} from '@/lib/mock-tenancy'
+import { mockDb } from '@/lib/mock-db'
 import type {
   AccountStatus, Invitation, Member, RoleId, Team, Workspace,
 } from '@/lib/rbac/types'
@@ -38,78 +36,78 @@ export const memberService = {
         limit: params.limit,
       },
       signal,
-      mock: () => ({ data: mockMembers, pageInfo: { nextCursor: null, hasMore: false } }),
+      mock: () => ({ data: mockDb.members(), pageInfo: { nextCursor: null, hasMore: false } }),
     }),
 
-  approve: (memberId: string) =>
+  approve: (memberId: string, actorId: string) =>
     resolveMutation<Member>({
       path: `/api/members/${memberId}/approve`,
-      mock: () => ({ ...mockMembers.find((m) => m.id === memberId)!, status: 'approved' as const }),
+      mock: () => mockDb.setMemberStatus(memberId, 'approved', actorId),
     }),
 
-  reject: (memberId: string) =>
+  reject: (memberId: string, actorId: string) =>
     resolveMutation<Member>({
       path: `/api/members/${memberId}/reject`,
-      mock: () => ({ ...mockMembers.find((m) => m.id === memberId)!, status: 'rejected' as const }),
+      mock: () => mockDb.setMemberStatus(memberId, 'rejected', actorId),
     }),
 
-  suspend: (memberId: string) =>
+  suspend: (memberId: string, actorId: string) =>
     resolveMutation<Member>({
       path: `/api/members/${memberId}/suspend`,
-      mock: () => ({ ...mockMembers.find((m) => m.id === memberId)!, status: 'suspended' as const }),
+      mock: () => mockDb.setMemberStatus(memberId, 'suspended', actorId),
     }),
 
-  activate: (memberId: string) =>
+  activate: (memberId: string, actorId: string) =>
     resolveMutation<Member>({
       path: `/api/members/${memberId}/activate`,
-      mock: () => ({ ...mockMembers.find((m) => m.id === memberId)!, status: 'approved' as const }),
+      mock: () => mockDb.setMemberStatus(memberId, 'approved', actorId),
     }),
 
-  remove: (memberId: string) =>
+  remove: (memberId: string, actorId: string) =>
     resolveMutation<{ ok: true }>({
       path: `/api/members/${memberId}`,
       method: 'DELETE',
-      mock: () => ({ ok: true }),
+      mock: () => mockDb.removeMember(memberId, actorId),
     }),
 
-  bulk: (memberIds: string[], action: 'approve' | 'reject' | 'suspend' | 'activate') =>
+  bulk: (
+    memberIds: string[],
+    action: 'approve' | 'reject' | 'suspend' | 'activate',
+    actorId: string,
+  ) =>
     resolveMutation<{ updated: number }>({
       path: '/api/members/bulk',
       body: { ids: memberIds, action },
-      mock: () => ({ updated: memberIds.length }),
+      mock: () => {
+        const status = action === 'reject' ? 'rejected' : action === 'suspend' ? 'suspended' : 'approved'
+        return mockDb.bulkMemberStatus(memberIds, status, actorId)
+      },
     }),
 
   listInvitations: (signal?: AbortSignal) =>
-    resolve<Invitation[]>({ path: '/api/invitations', signal, mock: () => mockInvitations }),
+    resolve<Invitation[]>({ path: '/api/invitations', signal, mock: () => mockDb.invitations() }),
 
-  invite: (input: { email: string; roleId: RoleId; workspaceId: string; teamId?: string }) =>
+  invite: (
+    input: { email: string; roleId: RoleId; workspaceId: string; teamId?: string },
+    actorId: string,
+  ) =>
     resolveMutation<Invitation>({
       path: '/api/invitations',
       body: input,
-      mock: () => ({
-        id: `inv-${Date.now()}`,
-        organizationId: 'org-1',
-        status: 'pending' as const,
-        token: '***',
-        invitedById: 'mem-1',
-        invitedAt: new Date(),
-        expiresAt: new Date(Date.now() + 7 * 86400000),
-        resendCount: 0,
-        ...input,
-      }),
+      mock: () => mockDb.createInvitation(input, actorId),
     }),
 
-  resendInvitation: (invitationId: string) =>
+  resendInvitation: (invitationId: string, actorId: string) =>
     resolveMutation<{ ok: true }>({
       path: `/api/invitations/${invitationId}/resend`,
-      mock: () => ({ ok: true }),
+      mock: () => mockDb.resendInvitation(invitationId, actorId),
     }),
 
-  cancelInvitation: (invitationId: string) =>
+  cancelInvitation: (invitationId: string, actorId: string) =>
     resolveMutation<{ ok: true }>({
       path: `/api/invitations/${invitationId}`,
       method: 'DELETE',
-      mock: () => ({ ok: true }),
+      mock: () => mockDb.cancelInvitation(invitationId, actorId),
     }),
 
   listTeams: (workspaceId?: string, signal?: AbortSignal) =>
@@ -117,9 +115,41 @@ export const memberService = {
       path: '/api/teams',
       query: { workspaceId },
       signal,
-      mock: () => mockTeams,
+      mock: () => mockDb.teams(),
     }),
 
   listWorkspaces: (signal?: AbortSignal) =>
-    resolve<Workspace[]>({ path: '/api/workspaces', signal, mock: () => mockWorkspaces }),
+    resolve<Workspace[]>({ path: '/api/workspaces', signal, mock: () => mockDb.workspaces() }),
+
+  createTeam: (
+    input: { name: string; workspaceId: string; description?: string; releaseManagerId?: string; qaLeadId?: string },
+    actorId: string,
+  ) =>
+    resolveMutation<Team>({
+      path: '/api/teams',
+      body: input,
+      mock: () => mockDb.createTeam(input, actorId),
+    }),
+
+  updateTeam: (teamId: string, patch: Partial<Team>, actorId: string) =>
+    resolveMutation<Team>({
+      path: `/api/teams/${teamId}`,
+      method: 'PATCH',
+      body: patch,
+      mock: () => mockDb.updateTeam(teamId, patch, actorId),
+    }),
+
+  deleteTeam: (teamId: string, actorId: string) =>
+    resolveMutation<{ ok: true }>({
+      path: `/api/teams/${teamId}`,
+      method: 'DELETE',
+      mock: () => mockDb.deleteTeam(teamId, actorId),
+    }),
+
+  setTeamMembers: (teamId: string, memberIds: string[], actorId: string) =>
+    resolveMutation<{ ok: true }>({
+      path: `/api/teams/${teamId}/members`,
+      body: { memberIds },
+      mock: () => mockDb.setTeamMembers(teamId, memberIds, actorId),
+    }),
 }

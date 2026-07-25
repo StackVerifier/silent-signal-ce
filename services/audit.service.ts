@@ -1,4 +1,4 @@
-import { mockAuditLogs } from '@/lib/mock-data'
+import { mockDb } from '@/lib/mock-db'
 import type { AuditAction, AuditLog, AuditResource } from '@/lib/types'
 import { resolve } from './transport'
 import type { Paginated } from './http'
@@ -19,7 +19,7 @@ export const auditService = {
       path: '/api/audit',
       query: { ...params },
       signal,
-      mock: () => ({ data: mockAuditLogs, pageInfo: { nextCursor: null, hasMore: false } }),
+      mock: () => ({ data: mockDb.auditLogs(), pageInfo: { nextCursor: null, hasMore: false } }),
     }),
 
   /** Returns a signed, time-limited download URL rather than streaming bytes. */

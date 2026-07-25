@@ -1,4 +1,4 @@
-import { mockIntegrations } from '@/lib/mock-data'
+import { mockDb } from '@/lib/mock-db'
 import type { Integration } from '@/lib/types'
 import { resolve, resolveMutation } from './transport'
 
@@ -44,7 +44,7 @@ export interface JiraFieldMapping {
   qaStatus: string | null
 }
 
-const jiraIntegration = () => mockIntegrations.find((integration) => integration.type === 'jira')
+const jiraIntegration = () => mockDb.integrations().find((integration) => integration.type === 'jira')
 
 export const jiraService = {
   /** Current connection record, or null when Jira has never been connected. */
@@ -57,19 +57,26 @@ export const jiraService = {
     }),
 
   /** Returns the URL to redirect to for the OAuth consent screen. */
-  startOAuth: (workspaceId?: string) =>
+  startOAuth: (workspaceId?: string, actorId = 'mem-1') =>
     resolveMutation<{ redirectUrl: string }>({
       path: '/api/integrations/jira/oauth/start',
       workspaceId,
-      mock: () => ({ redirectUrl: '/integrations?mock_oauth=1' }),
+      mock: () => {
+        // Mock mode short-circuits the consent screen and marks it connected.
+        mockDb.setIntegrationEnabled('jira', true, actorId)
+        return { redirectUrl: '' }
+      },
     }),
 
-  disconnect: (workspaceId?: string) =>
+  disconnect: (workspaceId?: string, actorId = 'mem-1') =>
     resolveMutation<{ ok: true }>({
       path: '/api/integrations/jira/disconnect',
       method: 'DELETE',
       workspaceId,
-      mock: () => ({ ok: true }),
+      mock: () => {
+        mockDb.setIntegrationEnabled('jira', false, actorId)
+        return { ok: true }
+      },
     }),
 
   listProjects: (workspaceId?: string, signal?: AbortSignal) =>
@@ -116,13 +123,16 @@ export const jiraService = {
     resolveMutation<JiraSyncStatus>({
       path: '/api/integrations/jira/sync',
       workspaceId,
-      mock: () => ({
-        state: 'syncing',
-        lastSyncAt: new Date(),
-        nextSyncAt: new Date(Date.now() + 5 * 60 * 1000),
-        rateLimitedUntil: null,
-        syncedIssueCount: 1284,
-      }),
+      mock: () => {
+        mockDb.recordSync('jira', 1284)
+        return ({
+          state: 'syncing' as const,
+          lastSyncAt: new Date(),
+          nextSyncAt: new Date(Date.now() + 5 * 60 * 1000),
+          rateLimitedUntil: null,
+          syncedIssueCount: 1284,
+        })
+      },
     }),
 
   getFieldMapping: (workspaceId?: string, signal?: AbortSignal) =>

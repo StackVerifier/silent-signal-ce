@@ -3,9 +3,11 @@
 import { useMemo, useState } from 'react'
 import {
   Search, ChevronDown, ChevronUp, ChevronLeft, ChevronRight,
-  Check, X, Ban, RotateCw, Trash2, Users, UserPlus, ShieldCheck,
+  Check, X, Ban, RotateCw, Trash2, UserPlus, ShieldCheck,
 } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
+import { useBulkMemberAction, useMemberAction } from '@/lib/query/hooks'
+import { useToast } from '@/components/ui/toast'
 import { PERMISSIONS } from '@/lib/rbac/permissions'
 import { canManageRole, getRoleLabel, SYSTEM_ROLE_LIST } from '@/lib/rbac/roles'
 import type { AccountStatus, Member } from '@/lib/rbac/types'
@@ -61,6 +63,9 @@ export function MembersTable({
   onInvite?: () => void
 }) {
   const { can, role: actorRole } = useAuth()
+  const memberAction = useMemberAction()
+  const bulkAction = useBulkMemberAction()
+  const toast = useToast()
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState<string>('all')
   const [roleFilter, setRoleFilter] = useState<string>('all')
@@ -119,6 +124,44 @@ export function MembersTable({
 
   const allVisibleSelected = visible.length > 0 && visible.every((member) => selected.has(member.id))
 
+  const ACTION_COPY: Record<string, string> = {
+    approve: 'approved', reject: 'rejected', suspend: 'suspended',
+    activate: 'reactivated', remove: 'removed',
+  }
+
+  const runAction = async (
+    memberId: string,
+    action: 'approve' | 'reject' | 'suspend' | 'activate' | 'remove',
+    name: string,
+  ) => {
+    // Removal is destructive and cannot be undone from the UI.
+    if (action === 'remove' && !window.confirm(`Remove ${name} from the organization?`)) return
+    try {
+      await memberAction.mutateAsync({ memberId, action })
+      toast.success(`Member ${ACTION_COPY[action]}`, `${name} has been ${ACTION_COPY[action]}.`)
+      setSelected((current) => {
+        const next = new Set(current)
+        next.delete(memberId)
+        return next
+      })
+    } catch (error) {
+      toast.error('Action failed', error instanceof Error ? error.message : 'Please try again.')
+    }
+  }
+
+  const runBulk = async (action: 'approve' | 'reject' | 'suspend' | 'activate') => {
+    const ids = [...selected]
+    try {
+      const result = await bulkAction.mutateAsync({ ids, action })
+      toast.success(
+        `${result.updated} member${result.updated === 1 ? '' : 's'} ${ACTION_COPY[action]}`,
+      )
+      setSelected(new Set())
+    } catch (error) {
+      toast.error('Bulk action failed', error instanceof Error ? error.message : 'Please try again.')
+    }
+  }
+
   const resetFilters = () => {
     setQuery(''); setStatus('all'); setRoleFilter('all')
     setWorkspaceFilter('all'); setTeamFilter('all'); setPage(0)
@@ -176,15 +219,15 @@ export function MembersTable({
             <div className="flex-1" />
             {canApprove && (
               <>
-                <BulkButton icon={Check} label="Approve" tone="success" />
-                <BulkButton icon={X} label="Reject" tone="danger" />
+                <BulkButton icon={Check} label="Approve" tone="success"
+                  disabled={bulkAction.isPending} onClick={() => runBulk('approve')} />
+                <BulkButton icon={X} label="Reject" tone="danger"
+                  disabled={bulkAction.isPending} onClick={() => runBulk('reject')} />
               </>
             )}
             {canWrite && (
-              <>
-                <BulkButton icon={Ban} label="Suspend" tone="warning" />
-                <BulkButton icon={Users} label="Transfer team" tone="neutral" />
-              </>
+              <BulkButton icon={Ban} label="Suspend" tone="warning"
+                disabled={bulkAction.isPending} onClick={() => runBulk('suspend')} />
             )}
             <button onClick={() => setSelected(new Set())} className="text-xs text-[#64748B] hover:text-[#E2E8F0] px-2 py-1">
               Clear
@@ -269,18 +312,28 @@ export function MembersTable({
                       <div className="flex items-center justify-end gap-1">
                         {member.status === 'pending' && canApprove && (
                           <>
-                            <RowAction icon={Check} label={`Approve ${member.name}`} tone="success" disabled={!manageable} />
-                            <RowAction icon={X} label={`Reject ${member.name}`} tone="danger" disabled={!manageable} />
+                            <RowAction icon={Check} label={`Approve ${member.name}`} tone="success"
+                              disabled={!manageable || memberAction.isPending}
+                              onClick={() => runAction(member.id, 'approve', member.name)} />
+                            <RowAction icon={X} label={`Reject ${member.name}`} tone="danger"
+                              disabled={!manageable || memberAction.isPending}
+                              onClick={() => runAction(member.id, 'reject', member.name)} />
                           </>
                         )}
                         {member.status === 'approved' && canWrite && (
-                          <RowAction icon={Ban} label={`Suspend ${member.name}`} tone="warning" disabled={!manageable} />
+                          <RowAction icon={Ban} label={`Suspend ${member.name}`} tone="warning"
+                            disabled={!manageable || memberAction.isPending}
+                            onClick={() => runAction(member.id, 'suspend', member.name)} />
                         )}
                         {member.status === 'suspended' && canWrite && (
-                          <RowAction icon={RotateCw} label={`Reactivate ${member.name}`} tone="success" disabled={!manageable} />
+                          <RowAction icon={RotateCw} label={`Reactivate ${member.name}`} tone="success"
+                            disabled={!manageable || memberAction.isPending}
+                            onClick={() => runAction(member.id, 'activate', member.name)} />
                         )}
                         {canWrite && (
-                          <RowAction icon={Trash2} label={`Remove ${member.name}`} tone="danger" disabled={!manageable} />
+                          <RowAction icon={Trash2} label={`Remove ${member.name}`} tone="danger"
+                            disabled={!manageable || memberAction.isPending}
+                            onClick={() => runAction(member.id, 'remove', member.name)} />
                         )}
                       </div>
                     </td>
@@ -350,12 +403,13 @@ const TONE_CLASSES = {
 } as const
 
 function RowAction({
-  icon: Icon, label, tone, disabled,
+  icon: Icon, label, tone, disabled, onClick,
 }: {
   icon: typeof Check
   label: string
   tone: keyof typeof TONE_CLASSES
   disabled?: boolean
+  onClick?: () => void
 }) {
   return (
     <button
@@ -363,6 +417,7 @@ function RowAction({
       title={label}
       aria-label={label}
       disabled={disabled}
+      onClick={onClick}
       className={cn(
         'p-1.5 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed',
         TONE_CLASSES[tone],
@@ -374,16 +429,21 @@ function RowAction({
 }
 
 function BulkButton({
-  icon: Icon, label, tone,
+  icon: Icon, label, tone, disabled, onClick,
 }: {
   icon: typeof Check
   label: string
   tone: keyof typeof TONE_CLASSES
+  disabled?: boolean
+  onClick?: () => void
 }) {
   return (
     <button
       type="button"
-      className={cn('inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors', TONE_CLASSES[tone])}
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        'disabled:opacity-50 disabled:cursor-not-allowed','inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors', TONE_CLASSES[tone])}
     >
       <Icon aria-hidden="true" className="w-3.5 h-3.5" />
       {label}

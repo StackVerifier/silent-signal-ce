@@ -10,6 +10,10 @@ import {
 } from 'lucide-react'
 import { SectionCard, ScoreBar } from './shared'
 import { rules } from '@/lib/mock-data'
+import { useToggleRule } from '@/lib/query/hooks'
+import { useToast } from '@/components/ui/toast'
+import { useAuth } from '@/lib/auth-context'
+import { PERMISSIONS } from '@/lib/rbac/permissions'
 import type { Rule } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -128,6 +132,22 @@ function CategoryBreakdown({ allRules }: { allRules: Rule[] }) {
 function RuleCard({ rule, index }: { rule: Rule; index: number }) {
   const [expanded, setExpanded] = useState(false)
   const [enabled, setEnabled] = useState(rule.enabled)
+  const toggleRule = useToggleRule()
+  const toast = useToast()
+  const canEdit = useAuth().can(PERMISSIONS.RULES_WRITE)
+
+  const handleToggle = async () => {
+    const next = !enabled
+    // Optimistic locally as well, so the switch never lags the pointer.
+    setEnabled(next)
+    try {
+      await toggleRule.mutateAsync({ ruleId: rule.id, enabled: next })
+      toast.success(next ? 'Rule enabled' : 'Rule paused', rule.name)
+    } catch (error) {
+      setEnabled(!next)
+      toast.error('Could not update rule', error instanceof Error ? error.message : 'Please try again.')
+    }
+  }
 
   const cat = CATEGORY_META[rule.category]
   const action = ACTION_META[rule.action]
@@ -188,9 +208,12 @@ function RuleCard({ rule, index }: { rule: Rule; index: number }) {
 
         {/* Toggle */}
         <button
-          onClick={(e) => { e.stopPropagation(); setEnabled(!enabled) }}
+          onClick={(e) => { e.stopPropagation(); if (canEdit) void handleToggle() }}
+          disabled={!canEdit || toggleRule.isPending}
+          aria-pressed={enabled}
+          aria-label={`${enabled ? 'Disable' : 'Enable'} rule ${rule.name}`}
           className="flex-shrink-0 transition-transform hover:scale-110"
-          title={enabled ? 'Disable rule' : 'Enable rule'}
+          title={canEdit ? (enabled ? 'Disable rule' : 'Enable rule') : 'You do not have permission to edit rules'}
         >
           {enabled ? (
             <ToggleRight className="w-6 h-6 text-[#22C55E]" />
