@@ -15,14 +15,20 @@ import { useGatedQuery } from '@/hooks/use-gated-data'
 import {
   useMarkAllNotificationsRead,
   useMarkNotificationRead,
-  useNotificationRoutes,
+  useDeleteWebhook,
   useNotifications,
+  useTestWebhook,
+  useWebhooks,
 } from '@/lib/query/hooks'
 import { useAuth } from '@/lib/auth-context'
 import { PERMISSIONS } from '@/lib/rbac/permissions'
 import { relativeTime } from '@/components/members/member-status-badge'
 import type { NotificationLevel, NotificationType } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { WebhookDialog } from '@/components/notifications/webhook-dialog'
+import { useToast } from '@/components/ui/toast'
+import type { WebhookEndpoint } from '@/services/notification.service'
+import { Plus, Pencil, Trash2, Send as SendIcon } from 'lucide-react'
 
 const TYPE_ICONS: Record<NotificationType, LucideIcon> = {
   risk: AlertTriangle, release: GitBranch, sprint: Zap,
@@ -51,7 +57,37 @@ export default function NotificationsPage() {
   const [filter, setFilter] = useState('all')
 
   const result = useGatedQuery(useNotifications(), { permission: PERMISSIONS.NOTIFICATIONS_READ })
-  const routes = useGatedQuery(useNotificationRoutes(), { permission: PERMISSIONS.NOTIFICATIONS_READ })
+  const webhooks = useGatedQuery(useWebhooks(), { permission: PERMISSIONS.NOTIFICATIONS_READ })
+  const deleteWebhook = useDeleteWebhook()
+  const testWebhook = useTestWebhook()
+  const toast = useToast()
+  const [webhookDialogOpen, setWebhookDialogOpen] = useState(false)
+  const [editingWebhook, setEditingWebhook] = useState<WebhookEndpoint | null>(null)
+
+  const openWebhookDialog = (endpoint: WebhookEndpoint | null) => {
+    setEditingWebhook(endpoint)
+    setWebhookDialogOpen(true)
+  }
+
+  const removeWebhook = async (endpoint: WebhookEndpoint) => {
+    if (!window.confirm(`Remove ${endpoint.label}? Alerts will stop being delivered there.`)) return
+    try {
+      await deleteWebhook.mutateAsync(endpoint.id)
+      toast.success('Destination removed', `${endpoint.label} will no longer receive alerts.`)
+    } catch (error) {
+      toast.error('Could not remove it', error instanceof Error ? error.message : 'Please try again.')
+    }
+  }
+
+  const sendTest = async (endpoint: WebhookEndpoint) => {
+    try {
+      const result = await testWebhook.mutateAsync(endpoint.id)
+      if (result.ok) toast.success('Test delivered', `Check ${endpoint.label}.`)
+      else toast.error('Test failed', result.error ?? 'The destination rejected the message.')
+    } catch (error) {
+      toast.error('Test failed', error instanceof Error ? error.message : 'Please try again.')
+    }
+  }
   const markRead = useMarkNotificationRead()
   const markAllRead = useMarkAllNotificationsRead()
 
@@ -93,56 +129,106 @@ export default function NotificationsPage() {
 
         <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6">
           <div className="max-w-4xl space-y-6">
-            {/* Delivery routing summary */}
+            {/* Delivery destinations — Slack and Teams are configured here */}
             {can(PERMISSIONS.NOTIFICATIONS_WRITE) && (
               <section className="bg-[#151D32] border border-[#1E2D4A] rounded-xl overflow-hidden">
-                <div className="px-5 py-4 border-b border-[#1E2D4A] flex items-center justify-between gap-3">
+                <div className="px-5 py-4 border-b border-[#1E2D4A] flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <h2 className="text-sm font-semibold text-[#E2E8F0]">Delivery channels</h2>
+                    <h2 className="text-sm font-semibold text-[#E2E8F0]">Delivery destinations</h2>
                     <p className="text-xs text-[#64748B] mt-0.5">
-                      Where alerts are sent once a rule fires
+                      Where alerts are posted once a rule fires. URLs are encrypted at rest.
                     </p>
                   </div>
-                  <Link
-                    href="/integrations"
-                    className="text-[11px] font-medium text-[#6C63FF] hover:text-[#8B85FF] transition-colors shrink-0"
+                  <button
+                    onClick={() => openWebhookDialog(null)}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#6C63FF] hover:bg-[#5B52CC] text-white text-xs font-medium transition-colors"
                   >
-                    Manage
-                  </Link>
+                    <Plus aria-hidden="true" className="w-3.5 h-3.5" />
+                    Add destination
+                  </button>
                 </div>
-                {routes.isSkeleton ? (
+
+                {webhooks.isSkeleton ? (
                   <div className="p-5"><SkeletonCard rows={2} /></div>
+                ) : (webhooks.data ?? []).length === 0 ? (
+                  <EmptyState
+                    icon={SendIcon}
+                    title="No delivery destinations yet"
+                    description="Add a Slack or Teams webhook so risk alerts reach the people who act on them."
+                    actions={[{ label: 'Add destination', onClick: () => openWebhookDialog(null) }]}
+                  />
                 ) : (
                   <ul className="divide-y divide-[#1E2D4A]/60">
-                    {(routes.data ?? []).map((route) => (
-                      <li key={`${route.channel}-${route.target}`} className="flex flex-wrap items-center gap-3 px-5 py-3.5">
-                        {route.channel === 'email' ? (
+                    {(webhooks.data ?? []).map((endpoint) => (
+                      <li key={endpoint.id} className="flex flex-wrap items-center gap-3 px-5 py-3.5">
+                        {endpoint.channel === 'email' ? (
                           <Mail aria-hidden="true" className="w-4 h-4 text-[#64748B] shrink-0" />
-                        ) : route.channel === 'teams' ? (
+                        ) : endpoint.channel === 'teams' ? (
                           <MessageSquare aria-hidden="true" className="w-4 h-4 text-[#64748B] shrink-0" />
                         ) : (
                           <Send aria-hidden="true" className="w-4 h-4 text-[#64748B] shrink-0" />
                         )}
+
                         <div className="min-w-0 flex-1">
-                          <p className="text-xs font-medium text-[#E2E8F0] truncate">
-                            {route.target}
-                          </p>
+                          <p className="text-xs font-medium text-[#E2E8F0] truncate">{endpoint.label}</p>
                           <p className="text-[11px] text-[#64748B] capitalize">
-                            {route.channel} · {route.minimumLevel} and above
-                            {route.quietHours &&
-                              ` · quiet ${route.quietHours.start}–${route.quietHours.end}`}
+                            {endpoint.channel} · {endpoint.minimumLevel} and above
+                            {endpoint.quietHours &&
+                              ` · quiet ${endpoint.quietHours.start}–${endpoint.quietHours.end}`}
                           </p>
+                          {/* Only a masked preview exists client-side. */}
+                          <p className="text-[10px] font-mono text-[#64748B]/80 mt-0.5 truncate">
+                            {endpoint.urlHint}
+                          </p>
+                          {endpoint.lastStatus === 'failed' && endpoint.lastError && (
+                            <p className="text-[10px] text-[#FCA5A5] mt-1">{endpoint.lastError}</p>
+                          )}
                         </div>
+
                         <span
                           className={cn(
                             'text-[10px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap',
-                            route.enabled
-                              ? 'text-[#22C55E] bg-[#22C55E]/10 border-[#22C55E]/25'
-                              : 'text-[#64748B] bg-[#64748B]/10 border-[#64748B]/25',
+                            !endpoint.enabled
+                              ? 'text-[#64748B] bg-[#64748B]/10 border-[#64748B]/25'
+                              : endpoint.lastStatus === 'failed'
+                                ? 'text-[#EF4444] bg-[#EF4444]/10 border-[#EF4444]/25'
+                                : endpoint.lastStatus === 'ok'
+                                  ? 'text-[#22C55E] bg-[#22C55E]/10 border-[#22C55E]/25'
+                                  : 'text-[#F59E0B] bg-[#F59E0B]/10 border-[#F59E0B]/25',
                           )}
                         >
-                          {route.enabled ? 'Active' : 'Paused'}
+                          {!endpoint.enabled ? 'Paused'
+                            : endpoint.lastStatus === 'ok' ? 'Verified'
+                            : endpoint.lastStatus === 'failed' ? 'Failing' : 'Untested'}
                         </span>
+
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={() => sendTest(endpoint)}
+                            disabled={testWebhook.isPending}
+                            title="Send a test message"
+                            aria-label={`Send a test message to ${endpoint.label}`}
+                            className="p-1.5 rounded-lg text-[#94A3B8] hover:bg-[#1E2D4A] disabled:opacity-50 transition-colors"
+                          >
+                            <SendIcon aria-hidden="true" className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => openWebhookDialog(endpoint)}
+                            title="Edit"
+                            aria-label={`Edit ${endpoint.label}`}
+                            className="p-1.5 rounded-lg text-[#94A3B8] hover:bg-[#1E2D4A] transition-colors"
+                          >
+                            <Pencil aria-hidden="true" className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => removeWebhook(endpoint)}
+                            title="Remove"
+                            aria-label={`Remove ${endpoint.label}`}
+                            className="p-1.5 rounded-lg text-[#EF4444] hover:bg-[#EF4444]/10 transition-colors"
+                          >
+                            <Trash2 aria-hidden="true" className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </li>
                     ))}
                   </ul>
@@ -268,6 +354,11 @@ export default function NotificationsPage() {
           </div>
         </div>
       </div>
+      <WebhookDialog
+        open={webhookDialogOpen}
+        onClose={() => setWebhookDialogOpen(false)}
+        endpoint={editingWebhook}
+      />
     </PermissionGuard>
   )
 }

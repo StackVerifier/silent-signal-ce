@@ -6,10 +6,10 @@ import { PERMISSIONS, type Permission } from '@/lib/rbac/permissions'
 import { queryKeys, queryScopes } from './keys'
 import {
   auditService, dashboardService, jiraService, memberService, notificationService,
-  qaService, releaseService, riskService, ruleService, sprintService,
+  qaService, releaseService, riskService, ruleService, sprintService, billingService,
 } from '@/services'
 import type { MemberQuery } from '@/services/member.service'
-import type { ChannelRoute } from '@/services/notification.service'
+import type { WebhookInput } from '@/services/notification.service'
 import type { JiraFieldMapping } from '@/services/jira.service'
 import type { RoleId, Team } from '@/lib/rbac/types'
 
@@ -75,11 +75,29 @@ export function useQaQueue() {
   })
 }
 
+export function useQaTesters() {
+  const { enabled, workspaceId } = useGate(PERMISSIONS.QA_READ)
+  return useQuery({
+    queryKey: [...queryKeys.qaTesters(workspaceId)],
+    queryFn: ({ signal }) => qaService.listTesters(workspaceId, signal),
+    enabled,
+  })
+}
+
 export function useRiskTimeline(range?: { from?: string; to?: string }) {
   const { enabled, workspaceId } = useGate(PERMISSIONS.RISK_READ)
   return useQuery({
     queryKey: queryKeys.riskTimeline(workspaceId, range),
     queryFn: ({ signal }) => riskService.listTimeline({ ...range, workspaceId }, signal),
+    enabled,
+  })
+}
+
+export function useSignals() {
+  const { enabled, workspaceId } = useGate(PERMISSIONS.RISK_READ)
+  return useQuery({
+    queryKey: queryKeys.signals(workspaceId),
+    queryFn: ({ signal }) => riskService.listSignals(workspaceId, signal),
     enabled,
   })
 }
@@ -150,16 +168,6 @@ export function useJiraProjects() {
   })
 }
 
-export function useJiraBoards(projectKey?: string) {
-  const { enabled, workspaceId } = useGate(PERMISSIONS.INTEGRATION_READ)
-  return useQuery({
-    queryKey: queryKeys.jiraBoards(workspaceId, projectKey),
-    queryFn: ({ signal }) => jiraService.listBoards(projectKey, workspaceId, signal),
-    enabled,
-    staleTime: 10 * 60_000,
-  })
-}
-
 export function useJiraFieldMapping() {
   const { enabled, workspaceId } = useGate(PERMISSIONS.INTEGRATION_READ)
   return useQuery({
@@ -174,7 +182,7 @@ export function useConnectJira() {
   const { workspace } = useAuth()
   const actorId = useActorId()
   return useMutation({
-    mutationFn: () => jiraService.startOAuth(workspace?.id, actorId),
+    mutationFn: () => jiraService.connect(workspace?.id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryScopes.allJira })
       queryClient.invalidateQueries({ queryKey: queryScopes.allAudit })
@@ -187,7 +195,7 @@ export function useDisconnectJira() {
   const { workspace } = useAuth()
   const actorId = useActorId()
   return useMutation({
-    mutationFn: () => jiraService.disconnect(workspace?.id, actorId),
+    mutationFn: () => jiraService.disconnect(workspace?.id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryScopes.allJira })
       queryClient.invalidateQueries({ queryKey: queryScopes.allAudit })
@@ -264,13 +272,7 @@ export function useMemberAction() {
   const actorId = useActorId()
   return useMutation({
     mutationFn: async ({ memberId, action }: { memberId: string; action: MemberAction }): Promise<void> => {
-      switch (action) {
-        case 'approve': await memberService.approve(memberId, actorId); return
-        case 'reject': await memberService.reject(memberId, actorId); return
-        case 'suspend': await memberService.suspend(memberId, actorId); return
-        case 'activate': await memberService.activate(memberId, actorId); return
-        case 'remove': await memberService.remove(memberId, actorId); return
-      }
+      await memberService.act(memberId, action)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryScopes.allMembers })
@@ -284,8 +286,12 @@ export function useBulkMemberAction() {
   const queryClient = useQueryClient()
   const actorId = useActorId()
   return useMutation({
-    mutationFn: ({ ids, action }: { ids: string[]; action: 'approve' | 'reject' | 'suspend' | 'activate' }) =>
-      memberService.bulk(ids, action, actorId),
+    // No bulk endpoint: each action is audited individually, and a partial
+    // failure must leave the successful ones applied.
+    mutationFn: async ({ ids, action }: { ids: string[]; action: 'approve' | 'reject' | 'suspend' | 'activate' }) => {
+      const results = await Promise.allSettled(ids.map((id) => memberService.act(id, action)))
+      return { updated: results.filter((item) => item.status === 'fulfilled').length }
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryScopes.allMembers })
       queryClient.invalidateQueries({ queryKey: queryScopes.allAudit })
@@ -298,7 +304,7 @@ export function useInviteMember() {
   const actorId = useActorId()
   return useMutation({
     mutationFn: (input: { email: string; roleId: RoleId; workspaceId: string; teamId?: string }) =>
-      memberService.invite(input, actorId),
+      memberService.invite(input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryScopes.allInvitations })
       queryClient.invalidateQueries({ queryKey: queryScopes.allAudit })
@@ -311,9 +317,7 @@ export function useInvitationAction() {
   const actorId = useActorId()
   return useMutation({
     mutationFn: ({ invitationId, action }: { invitationId: string; action: 'resend' | 'cancel' }) =>
-      action === 'resend'
-        ? memberService.resendInvitation(invitationId, actorId)
-        : memberService.cancelInvitation(invitationId, actorId),
+      memberService.invitationAction(invitationId, action),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryScopes.allInvitations })
       queryClient.invalidateQueries({ queryKey: queryScopes.allAudit })
@@ -328,7 +332,7 @@ export function useCreateTeam() {
     mutationFn: (input: {
       name: string; workspaceId: string; description?: string
       releaseManagerId?: string; qaLeadId?: string
-    }) => memberService.createTeam(input, actorId),
+    }) => memberService.createTeam(input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryScopes.allTeams })
       queryClient.invalidateQueries({ queryKey: queryScopes.allAudit })
@@ -341,7 +345,7 @@ export function useUpdateTeam() {
   const actorId = useActorId()
   return useMutation({
     mutationFn: ({ teamId, patch }: { teamId: string; patch: Partial<Team> }) =>
-      memberService.updateTeam(teamId, patch, actorId),
+      memberService.updateTeam(teamId, patch),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryScopes.allTeams })
       queryClient.invalidateQueries({ queryKey: queryScopes.allAudit })
@@ -353,7 +357,7 @@ export function useDeleteTeam() {
   const queryClient = useQueryClient()
   const actorId = useActorId()
   return useMutation({
-    mutationFn: (teamId: string) => memberService.deleteTeam(teamId, actorId),
+    mutationFn: (teamId: string) => memberService.deleteTeam(teamId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryScopes.allTeams })
       queryClient.invalidateQueries({ queryKey: queryScopes.allMembers })
@@ -367,7 +371,7 @@ export function useSetTeamMembers() {
   const actorId = useActorId()
   return useMutation({
     mutationFn: ({ teamId, memberIds }: { teamId: string; memberIds: string[] }) =>
-      memberService.setTeamMembers(teamId, memberIds, actorId),
+      memberService.setTeamMembers(teamId, memberIds),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryScopes.allTeams })
       queryClient.invalidateQueries({ queryKey: queryScopes.allMembers })
@@ -387,16 +391,7 @@ export function useNotifications() {
   })
 }
 
-export function useNotificationRoutes() {
-  const { enabled, workspaceId } = useGate(PERMISSIONS.NOTIFICATIONS_READ)
-  return useQuery({
-    queryKey: queryKeys.notificationRoutes(workspaceId),
-    queryFn: ({ signal }) => notificationService.listRoutes(workspaceId, signal),
-    enabled,
-  })
-}
-
-/** Optimistic: marking read must feel instant, and the badge is derived state. */
+/** Optimistic: the unread badge is derived state, so a round trip reads as broken. */
 export function useMarkNotificationRead() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -437,13 +432,58 @@ export function useMarkAllNotificationsRead() {
   })
 }
 
-export function useSaveNotificationRoute() {
+export function useWebhooks() {
+  const { enabled, workspaceId } = useGate(PERMISSIONS.NOTIFICATIONS_READ)
+  return useQuery({
+    queryKey: queryKeys.webhooks(workspaceId),
+    queryFn: ({ signal }) => notificationService.listWebhooks(workspaceId, signal),
+    enabled,
+  })
+}
+
+export function useSaveWebhook() {
   const queryClient = useQueryClient()
   const { workspace } = useAuth()
   return useMutation({
-    mutationFn: (route: ChannelRoute) => notificationService.saveRoute(route, workspace?.id),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: queryKeys.notificationRoutes(workspace?.id) }),
+    mutationFn: ({ id, input }: { id?: string; input: Partial<WebhookInput> }) =>
+      id
+        ? notificationService.updateWebhook(id, input, workspace?.id)
+        : notificationService.createWebhook(input as WebhookInput, workspace?.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryScopes.allWebhooks })
+      queryClient.invalidateQueries({ queryKey: queryScopes.allAudit })
+    },
+  })
+}
+
+export function useDeleteWebhook() {
+  const queryClient = useQueryClient()
+  const { workspace } = useAuth()
+  return useMutation({
+    mutationFn: (webhookId: string) => notificationService.deleteWebhook(webhookId, workspace?.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryScopes.allWebhooks })
+      queryClient.invalidateQueries({ queryKey: queryScopes.allAudit })
+    },
+  })
+}
+
+/** Posts a real message, so wiring is proven before an incident tests it. */
+export function useTestWebhook() {
+  const queryClient = useQueryClient()
+  const { workspace } = useAuth()
+  return useMutation({
+    mutationFn: (webhookId: string) => notificationService.testWebhook(webhookId, workspace?.id),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryScopes.allWebhooks }),
+  })
+}
+
+export function useBilling() {
+  const { enabled, workspaceId } = useGate(PERMISSIONS.BILLING_READ)
+  return useQuery({
+    queryKey: ['billing', workspaceId],
+    queryFn: ({ signal }) => billingService.get(workspaceId, signal),
+    enabled,
   })
 }
 

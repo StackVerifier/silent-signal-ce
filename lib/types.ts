@@ -179,6 +179,17 @@ export interface DashboardMetrics {
   lastSyncAt: Date
 }
 
+export interface RiskTimelineEvent {
+  id: string
+  date: Date
+  type: 'risk-increase' | 'risk-decrease' | 'alert' | 'resolved' | 'sprint-start' | 'sprint-end' | 'release'
+  title: string
+  description: string
+  riskDelta: number
+  service?: string
+  severity: 'critical' | 'high' | 'medium' | 'low'
+}
+
 // ─── Actor Types ──────────────────────────────────────────────────────────────
 // Identity, roles, org/workspace/team and permissions live in `lib/rbac/*`.
 // Only the lightweight actor projection used by domain records stays here.

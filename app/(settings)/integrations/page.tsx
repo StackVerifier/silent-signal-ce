@@ -127,7 +127,7 @@ export default function IntegrationsPage() {
                           <dt className="text-[10px] text-[#64748B] uppercase tracking-widest">Last sync</dt>
                           <dd className="text-xs text-[#E2E8F0] mt-0.5 flex items-center gap-1">
                             <Clock aria-hidden="true" className="w-3 h-3 text-[#64748B]" />
-                            {sync.data.lastSyncAt ? relativeTime(sync.data.lastSyncAt) : 'Never'}
+                            {sync.data.lastSyncAt ? relativeTime(new Date(sync.data.lastSyncAt)) : 'Never'}
                           </dd>
                         </div>
                         <div>

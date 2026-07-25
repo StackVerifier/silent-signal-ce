@@ -4,15 +4,15 @@ import type {
   Organization,
   Team,
   Workspace,
-} from './rbac/types'
+} from '../../lib/rbac/types'
 
 /**
- * Mock tenancy graph. Shaped exactly like the API contracts in
- * docs/rbac-architecture.md so swapping in real endpoints is a service-layer
- * change, not a component change.
+ * Seed data for a fresh installation — one demo organization so the product has
+ * something to show before Jira is connected. Written into SQLite by
+ * `scripts/seed-app.mjs`; nothing reads this module at runtime.
  */
 
-export const mockOrganization: Organization = {
+export const seedOrganization: Organization = {
   id: 'org-1',
   name: 'Boyner',
   slug: 'boyner',
@@ -31,7 +31,7 @@ export const mockOrganization: Organization = {
   },
 }
 
-export const mockWorkspaces: Workspace[] = [
+export const seedWorkspaces: Workspace[] = [
   {
     id: 'ws-1',
     organizationId: 'org-1',
@@ -68,7 +68,7 @@ export const mockWorkspaces: Workspace[] = [
   },
 ]
 
-export const mockTeams: Team[] = [
+export const seedTeams: Team[] = [
   { id: 'team-1', organizationId: 'org-1', workspaceId: 'ws-1', name: 'QA Team', description: 'Quality engineering for platform releases', qaLeadId: 'mem-4', createdAt: new Date('2025-01-20') },
   { id: 'team-2', organizationId: 'org-1', workspaceId: 'ws-1', name: 'Backend Team', description: 'Core services and APIs', releaseManagerId: 'mem-3', createdAt: new Date('2025-01-20') },
   { id: 'team-3', organizationId: 'org-1', workspaceId: 'ws-1', name: 'Mobile Team', description: 'iOS and Android clients', createdAt: new Date('2025-02-11') },
@@ -79,7 +79,7 @@ export const mockTeams: Team[] = [
 const daysAgo = (days: number) => new Date(Date.now() - days * 86400000)
 const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3600000)
 
-export const mockMembers: Member[] = [
+export const seedMembers: Member[] = [
   {
     id: 'mem-1', organizationId: 'org-1', userId: 'user-1',
     email: 'alice@boyner.com.tr', name: 'Alice Chen', avatar: 'AC',
@@ -158,7 +158,7 @@ export const mockMembers: Member[] = [
   },
 ]
 
-export const mockInvitations: Invitation[] = [
+export const seedInvitations: Invitation[] = [
   {
     id: 'inv-1', organizationId: 'org-1', email: 'kerem@boyner.com.tr',
     roleId: 'developer', workspaceId: 'ws-1', teamId: 'team-2',
@@ -185,28 +185,3 @@ export const mockInvitations: Invitation[] = [
     invitedAt: daysAgo(9), expiresAt: daysAgo(2), resendCount: 0,
   },
 ]
-
-// ─── Lookups ──────────────────────────────────────────────────────────────────
-
-export function findMemberByEmail(email: string): Member | undefined {
-  const normalized = email.trim().toLowerCase()
-  return mockMembers.find((member) => member.email.toLowerCase() === normalized)
-}
-
-export function workspacesForMember(member: Member): Workspace[] {
-  return mockWorkspaces.filter(
-    (workspace) => workspace.status === 'active' && member.workspaceIds.includes(workspace.id),
-  )
-}
-
-export function teamsForWorkspace(workspaceId: string): Team[] {
-  return mockTeams.filter((team) => team.workspaceId === workspaceId)
-}
-
-export function memberCountForTeam(teamId: string): number {
-  return mockMembers.filter((member) => member.teamIds.includes(teamId)).length
-}
-
-export function memberCountForWorkspace(workspaceId: string): number {
-  return mockMembers.filter((member) => member.workspaceIds.includes(workspaceId)).length
-}

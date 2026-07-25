@@ -1,7 +1,7 @@
 'use client'
 
 import { SettingsPageHeader } from '@/components/settings/page-header'
-import { mockBillingInfo } from '@/lib/mock-data'
+import { useBilling } from '@/lib/query/hooks'
 import { motion } from 'framer-motion'
 import { CreditCard, CheckCircle, AlertCircle } from 'lucide-react'
 
@@ -11,8 +11,10 @@ const PLAN_FEATURES: Record<string, string[]> = {
 }
 
 export default function BillingPage() {
+  const billing = useBilling().data
+  if (!billing) return null
   const daysUntilNextBilling = Math.ceil(
-    (new Date(mockBillingInfo.nextBillingDate || Date.now()).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+    (new Date(billing.nextBillingDate || Date.now()).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
   )
 
   return (
@@ -34,10 +36,10 @@ export default function BillingPage() {
               <div>
                 <h2 className="text-lg font-semibold text-[#E2E8F0] flex items-center gap-2">
                   <CreditCard className="w-5 h-5 text-[#6C63FF]" />
-                  {mockBillingInfo.plan.charAt(0).toUpperCase() + mockBillingInfo.plan.slice(1)} Plan
+                  {billing.plan.charAt(0).toUpperCase() + billing.plan.slice(1)} Plan
                 </h2>
                 <p className="text-sm text-[#64748B] mt-2">
-                  {mockBillingInfo.status === 'active' ? (
+                  {billing.status === 'active' ? (
                     <>
                       <CheckCircle className="w-4 h-4 inline mr-1 text-[#10B981]" />
                       Active subscription
@@ -45,7 +47,7 @@ export default function BillingPage() {
                   ) : (
                     <>
                       <AlertCircle className="w-4 h-4 inline mr-1 text-[#EF4444]" />
-                      Subscription {mockBillingInfo.status}
+                      Subscription {billing.status}
                     </>
                   )}
                 </p>
@@ -59,8 +61,8 @@ export default function BillingPage() {
               <div>
                 <p className="text-xs text-[#64748B] uppercase tracking-widest">Billing Period</p>
                 <p className="font-semibold text-[#E2E8F0] mt-1">
-                  {new Date(mockBillingInfo.currentPeriodStart).toLocaleDateString()} -{' '}
-                  {new Date(mockBillingInfo.currentPeriodEnd).toLocaleDateString()}
+                  {new Date(billing.currentPeriodStart).toLocaleDateString()} -{' '}
+                  {new Date(billing.currentPeriodEnd).toLocaleDateString()}
                 </p>
               </div>
               <div>
@@ -83,7 +85,7 @@ export default function BillingPage() {
           >
             <h2 className="text-lg font-semibold text-[#E2E8F0] mb-4">Current Usage</h2>
             <div className="space-y-4">
-              {Object.entries(mockBillingInfo.usage).map(([key, value]) => (
+              {Object.entries(billing.usage).map(([key, value]) => (
                 <div key={key}>
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm text-[#E2E8F0] capitalize">{key}</span>
@@ -111,7 +113,7 @@ export default function BillingPage() {
           >
             <h2 className="text-lg font-semibold text-[#E2E8F0] mb-4">Included Features</h2>
             <ul className="space-y-2">
-              {PLAN_FEATURES[mockBillingInfo.plan]?.map((feature, idx) => (
+              {PLAN_FEATURES[billing.plan]?.map((feature, idx) => (
                 <li key={idx} className="flex items-center gap-2 text-[#E2E8F0]">
                   <CheckCircle className="w-4 h-4 text-[#10B981] flex-shrink-0" />
                   {feature}

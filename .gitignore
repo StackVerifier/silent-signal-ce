@@ -9,6 +9,10 @@
 *.pem
 *.key
 secrets/
+# Runtime database and its local encryption key. data/help.db is a build
+# artefact and stays committed.
+data/silent-signal.db*
+data/.encryption-key
 
 # ─── Dependencies & build output ──────────────────────────────────────────────
 node_modules

@@ -7,9 +7,7 @@ import { RiskCard } from './risk-card'
 import { SectionCard, ScoreBar, SeverityDot } from './shared'
 import { MetricInfo } from '@/components/ui/tooltip'
 import { ActivityFeed } from './activity-feed'
-import {
-  dashboardMetrics, serviceHealth, liveSignals, releases, sprints
-} from '@/lib/mock-data'
+import { useDashboardSnapshot, useReleases, useSprints } from '@/lib/query/hooks'
 
 const fadeUp = {
   hidden: { opacity: 0, y: 16 },
@@ -31,7 +29,8 @@ function SyncIndicator() {
 }
 
 function TopMetrics() {
-  const m = dashboardMetrics
+  const m = useDashboardSnapshot().data?.metrics
+  if (!m) return null
   const tiles = [
     {
       label: 'Release Health',
@@ -164,7 +163,7 @@ function RiskRadar() {
       }
     >
       <div className="p-5 space-y-4">
-        {serviceHealth.map((svc, i) => (
+        {(useDashboardSnapshot().data?.serviceHealth ?? []).map((svc, i) => (
           <motion.div
             key={svc.name}
             className="space-y-1.5"
@@ -200,7 +199,7 @@ function RiskRadar() {
 }
 
 function LiveSignalsFeed() {
-  const signals = liveSignals
+  const signals = useDashboardSnapshot().data?.liveSignals ?? []
 
   const timeAgo = (date: Date) => {
     const diff = Math.floor((Date.now() - date.getTime()) / 60000)
@@ -249,7 +248,8 @@ function LiveSignalsFeed() {
 }
 
 function SprintSnapshot() {
-  const sprint = sprints[0]
+  const sprint = useSprints().data?.[0]
+  if (!sprint) return null
   const completionPct = Math.round((sprint.completedPoints / sprint.totalPoints) * 100)
   const daysLeft = Math.ceil((sprint.endDate.getTime() - Date.now()) / 86400000)
 
@@ -307,7 +307,8 @@ function SprintSnapshot() {
 }
 
 function ReleaseSnapshot() {
-  const release = releases[0]
+  const release = useReleases().data?.[0]
+  if (!release) return null
   return (
     <SectionCard
       title={release.name}

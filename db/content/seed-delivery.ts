@@ -1,9 +1,9 @@
 import type {
   DashboardMetrics, ServiceHealth, LiveSignal,
   Sprint, Release, QAItem, QATester, Rule, Signal,
-  Notification, AuditLog, Integration, BillingInfo
-} from './types'
-import { mockMembers } from './mock-tenancy'
+  Notification, AuditLog, Integration, BillingInfo, RiskTimelineEvent
+} from '../../lib/types'
+import { seedMembers } from './seed-tenancy.ts'
 
 // ─── Dashboard Metrics ────────────────────────────────────────────────────────
 
@@ -350,17 +350,6 @@ export const rules: Rule[] = [
 
 // ─── Risk Timeline ────────────────────────────────────────────────────────────
 
-export interface RiskTimelineEvent {
-  id: string
-  date: Date
-  type: 'risk-increase' | 'risk-decrease' | 'alert' | 'resolved' | 'sprint-start' | 'sprint-end' | 'release'
-  title: string
-  description: string
-  riskDelta: number
-  service?: string
-  severity: 'critical' | 'high' | 'medium' | 'low'
-}
-
 export const riskTimeline: RiskTimelineEvent[] = [
   { id: 't1', date: new Date('2026-07-25T09:15:00'), type: 'risk-increase', title: 'QA bottleneck detected', description: 'PAY-123 waiting 5 days in Development Done', riskDelta: +15, service: 'Payment', severity: 'critical' },
   { id: 't2', date: new Date('2026-07-25T07:30:00'), type: 'alert', title: 'Critical bug reopened', description: 'PAY-145 reopened for 2nd time', riskDelta: +8, service: 'Payment', severity: 'critical' },
@@ -378,13 +367,13 @@ export const riskTimeline: RiskTimelineEvent[] = [
 
 // Actors referenced by audit records — projected from the tenancy graph.
 const actor = (id: string) => {
-  const member = mockMembers.find((candidate) => candidate.id === id)!
+  const member = seedMembers.find((candidate) => candidate.id === id)!
   return { id: member.id, name: member.name, email: member.email, avatar: member.avatar }
 }
 
 // ─── Notifications ────────────────────────────────────────────────────────────
 
-export const mockNotifications: Notification[] = [
+export const seedNotifications: Notification[] = [
   {
     id: 'notif-1',
     userId: 'mem-1',
@@ -457,11 +446,11 @@ const moreNotifications: Notification[] = [
   },
 ]
 
-mockNotifications.push(...moreNotifications)
+seedNotifications.push(...moreNotifications)
 
 // ─── Audit Logs ───────────────────────────────────────────────────────────────
 
-export const mockAuditLogs: AuditLog[] = [
+export const seedAuditLogs: AuditLog[] = [
   {
     id: 'audit-1',
     organizationId: 'org-1',
@@ -521,11 +510,11 @@ const moreAuditLogs: AuditLog[] = [
     createdAt: new Date(Date.now() - 129600000) },
 ]
 
-mockAuditLogs.push(...moreAuditLogs)
+seedAuditLogs.push(...moreAuditLogs)
 
 // ─── Integrations ─────────────────────────────────────────────────────────────
 
-export const mockIntegrations: Integration[] = [
+export const seedIntegrations: Integration[] = [
   {
     id: 'int-1',
     workspaceId: 'ws-1',
@@ -559,7 +548,7 @@ export const mockIntegrations: Integration[] = [
 
 // ─── Billing ──────────────────────────────────────────────────────────────────
 
-export const mockBillingInfo: BillingInfo = {
+export const seedBilling: BillingInfo = {
   workspaceId: 'ws-1',
   plan: 'pro',
   status: 'active',
