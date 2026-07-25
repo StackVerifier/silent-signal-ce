@@ -4,11 +4,13 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "predev": "node --experimental-strip-types scripts/seed-help.mjs",
     "build": "next build",
+    "prebuild": "node --experimental-strip-types scripts/seed-help.mjs",
     "start": "next start",
-    "lint": "eslint .",
     "db:seed": "node --experimental-strip-types scripts/seed-help.mjs",
-    "prebuild": "node --experimental-strip-types scripts/seed-help.mjs"
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
