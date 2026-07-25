@@ -38,6 +38,19 @@ const nextConfig = {
   // Type errors used to be ignored at build time, which meant a broken build
   // could ship silently. `pnpm typecheck` runs the same check in CI.
   poweredByHeader: false,
+  /**
+   * `pg` is loaded by Node at runtime, not bundled.
+   *
+   * The Postgres driver is behind a dynamic `import('pg')` that only runs when
+   * DATABASE_URL is set, but a bundler resolves that specifier at build time
+   * regardless — so a SQLite-only deployment, which never touches the module,
+   * still failed to build if `pg` was absent from node_modules. Marking it
+   * external moves the resolution to the moment it is actually used.
+   *
+   * It also avoids bundling a driver that carries optional native bindings,
+   * which is what `serverExternalPackages` exists for.
+   */
+  serverExternalPackages: ['pg'],
   async headers() {
     return [
       { source: '/:path*', headers: securityHeaders },

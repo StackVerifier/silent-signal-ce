@@ -25,6 +25,19 @@ for the audit id. Table and column names are identical.
 
 `pnpm db:seed` seeds whichever database `DATABASE_URL` selects.
 
+### The `pg` package is loaded, not bundled
+
+The Postgres driver sits behind a dynamic `import('pg')` that only runs when
+`DATABASE_URL` is set — but a bundler resolves that specifier at build time
+regardless of whether the branch is ever taken. A SQLite-only deployment
+therefore failed to build with `Module not found: Can't resolve 'pg'` whenever
+the package was missing from `node_modules`, despite never touching it.
+
+`serverExternalPackages: ['pg']` in `next.config.mjs` moves the resolution to
+the moment it is actually used. If the package really is absent when Postgres
+is selected, the failure says so and names the fix rather than surfacing a bare
+`MODULE_NOT_FOUND`.
+
 ## Two databases, different lifecycles
 
 | Store | Written at runtime | Committed | Purpose |
