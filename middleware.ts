@@ -1,27 +1,75 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { SESSION_COOKIE } from '@/lib/auth-config'
+import { SESSION_COOKIE, decodeClaims } from '@/lib/auth-config'
+import { STATUS_CAN_AUTHENTICATE, STATUS_GRANTS_DATA_ACCESS } from '@/lib/rbac/access'
+import { requiredPermissionsForPath } from '@/lib/rbac/navigation'
+import { resolveRole } from '@/lib/rbac/roles'
 
 const PUBLIC_PREFIXES = ['/auth']
+/** Reachable by any authenticated member, whatever their status or role. */
+const STATUS_PAGES = ['/account-status', '/no-access']
 
+function isPrefixed(pathname: string, prefixes: string[]) {
+  return prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))
+}
+
+/**
+ * Authorization at the edge — the first of two enforcement layers.
+ *
+ * This blocks navigation. It is NOT the security boundary on its own: every
+ * data-returning route handler must re-check permissions server-side, because a
+ * client can always call the API directly.
+ */
 export function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl
-  const hasSession = Boolean(request.cookies.get(SESSION_COOKIE)?.value)
-  const isPublic = PUBLIC_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-  )
+  const claims = decodeClaims(request.cookies.get(SESSION_COOKIE)?.value ?? '')
+  const isPublic = isPrefixed(pathname, PUBLIC_PREFIXES)
 
-  // Signed-in users should never land back on the login screen.
-  if (hasSession && isPublic) {
+  if (!claims) {
+    if (isPublic) return NextResponse.next()
+    const loginUrl = new URL('/auth/login', request.url)
+    if (pathname !== '/') loginUrl.searchParams.set('redirect', `${pathname}${search}`)
+    const response = NextResponse.redirect(loginUrl)
+    // Drop a stale/tampered cookie so the loop cannot repeat.
+    response.cookies.delete(SESSION_COOKIE)
+    return response
+  }
+
+  // Statuses that must not hold a session at all.
+  if (!STATUS_CAN_AUTHENTICATE[claims.status]) {
+    const response = NextResponse.redirect(new URL('/auth/login?reason=inactive', request.url))
+    response.cookies.delete(SESSION_COOKIE)
+    return response
+  }
+
+  if (isPublic) {
     return NextResponse.redirect(new URL('/', request.url))
   }
 
-  if (!hasSession && !isPublic) {
-    const loginUrl = new URL('/auth/login', request.url)
-    if (pathname !== '/') {
-      loginUrl.searchParams.set('redirect', `${pathname}${search}`)
+  // Suspended members get one destination and nothing else.
+  if (claims.status === 'suspended') {
+    return pathname === '/account-status'
+      ? NextResponse.next()
+      : NextResponse.redirect(new URL('/account-status', request.url))
+  }
+
+  if (isPrefixed(pathname, STATUS_PAGES)) return NextResponse.next()
+
+  // Pending members keep full navigation but no data — every allowed page
+  // renders in its locked, skeleton state (enforced in the data layer).
+  if (!STATUS_GRANTS_DATA_ACCESS[claims.status]) {
+    return NextResponse.next()
+  }
+
+  const required = requiredPermissionsForPath(pathname)
+  if (required && required.length > 0) {
+    const permissions = resolveRole(claims.roleId).permissions
+    const allowed = required.some((permission) => permissions.includes(permission))
+    if (!allowed) {
+      const deniedUrl = new URL('/no-access', request.url)
+      deniedUrl.searchParams.set('from', pathname)
+      return NextResponse.redirect(deniedUrl)
     }
-    return NextResponse.redirect(loginUrl)
   }
 
   return NextResponse.next()

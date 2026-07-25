@@ -5,6 +5,7 @@ import { AlertTriangle, Activity, FlaskConical, Shield, Zap, GitBranch, ArrowRig
 import Link from 'next/link'
 import { RiskCard } from './risk-card'
 import { SectionCard, ScoreBar, SeverityDot } from './shared'
+import { MetricInfo } from '@/components/ui/tooltip'
 import {
   dashboardMetrics, serviceHealth, liveSignals, releases, sprints
 } from '@/lib/mock-data'
@@ -39,6 +40,8 @@ function TopMetrics() {
       icon: GitBranch,
       href: '/release',
       riskLevel: m.releaseRiskLevel,
+      formula: 'Weighted risk of open gates, blockers and days remaining',
+      source: 'Jira releases + gate checklist',
     },
     {
       label: 'Sprint Health',
@@ -48,6 +51,8 @@ function TopMetrics() {
       icon: Zap,
       href: '/sprint',
       riskLevel: m.sprintRiskLevel,
+      formula: 'Completed story points ÷ committed points, adjusted for scope change',
+      source: 'Jira board — active sprint',
     },
     {
       label: 'QA Queue',
@@ -57,6 +62,8 @@ function TopMetrics() {
       icon: FlaskConical,
       href: '/qa-queue',
       riskLevel: null,
+      formula: 'Issues in a QA status with no tester assigned or still in test',
+      source: 'Jira issues — QA workflow states',
     },
     {
       label: 'Blocked Issues',
@@ -66,6 +73,8 @@ function TopMetrics() {
       icon: AlertTriangle,
       href: '/sprint',
       riskLevel: null,
+      formula: 'Issues flagged Blocked or with an unresolved blocking link',
+      source: 'Jira issue links + flags',
     },
     {
       label: 'Open Risks',
@@ -75,6 +84,8 @@ function TopMetrics() {
       icon: Activity,
       href: '/risk-timeline',
       riskLevel: null,
+      formula: 'Rule triggers in the last 14 days that are not acknowledged',
+      source: 'Rule engine evaluations',
     },
     {
       label: 'Active Rules',
@@ -84,6 +95,8 @@ function TopMetrics() {
       icon: Shield,
       href: '/rules',
       riskLevel: null,
+      formula: 'Enabled rules evaluated on every sync',
+      source: 'Rule configuration',
     },
   ]
 
@@ -97,9 +110,24 @@ function TopMetrics() {
       {tiles.map((tile, i) => (
         <motion.div key={i} variants={fadeUp}>
           <Link href={tile.href}>
-            <div className="bg-[#151D32] border border-[#1E2D4A] rounded-xl p-4 hover:border-[#1E2D4A]/80 hover:bg-[#1a2440] transition-all group">
+            <div className="bg-[#151D32] border border-[#1E2D4A] rounded-xl p-4 hover:border-[#6C63FF]/40 hover:bg-[#1a2440] hover:shadow-lg hover:shadow-black/20 transition-colors group h-full">
               <div className="flex items-start justify-between mb-3">
-                <tile.icon className="w-4 h-4" style={{ color: tile.color }} />
+                <span className="flex items-center gap-1">
+                  <tile.icon aria-hidden="true" className="w-4 h-4" style={{ color: tile.color }} />
+                  {tile.formula && (
+                    <span
+                      className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity"
+                      onClick={(event) => event.preventDefault()}
+                    >
+                      <MetricInfo
+                        formula={tile.formula}
+                        source={tile.source ?? 'Jira'}
+                        updatedAt={m.lastSyncAt}
+                        side="bottom"
+                      />
+                    </span>
+                  )}
+                </span>
                 {tile.riskLevel && (
                   <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase ${
                     tile.riskLevel === 'HIGH' ? 'bg-[#EF4444]/15 text-[#EF4444]' :
@@ -240,7 +268,7 @@ function SprintSnapshot() {
       }
     >
       <div className="p-5 space-y-4">
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {[
             { label: 'Completed', value: sprint.completedPoints, color: '#22C55E' },
             { label: 'Remaining', value: sprint.remainingPoints, color: '#F59E0B' },
@@ -339,7 +367,7 @@ function ReleaseSnapshot() {
 
 export function ExecutiveDashboard() {
   return (
-    <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-[1600px] mx-auto">
       {/* Header */}
       <motion.div
         className="flex items-center justify-between"

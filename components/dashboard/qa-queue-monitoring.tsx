@@ -196,7 +196,7 @@ function QAQueueTable() {
           {filtered.map((item, i) => (
             <motion.div
               key={item.id}
-              className="grid grid-cols-12 gap-3 px-5 py-3.5 hover:bg-[#1a2440] transition-colors items-center"
+              className="grid grid-cols-1 sm:grid-cols-12 gap-2 sm:gap-3 px-4 sm:px-5 py-3.5 hover:bg-[#1a2440] transition-colors sm:items-center"
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.04 }}
@@ -274,7 +274,7 @@ function QAQueueTable() {
 
 export function QAQueueMonitoring() {
   return (
-    <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-[1600px] mx-auto">
       <div>
         <h2 className="text-lg font-semibold text-[#E2E8F0]">QA Queue Monitoring</h2>
         <p className="text-xs text-[#64748B] mt-0.5">Bottleneck detection via rule engine</p>

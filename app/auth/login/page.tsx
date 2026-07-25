@@ -3,7 +3,7 @@
 import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth-context'
-import { DEFAULT_DEMO_ACCOUNT } from '@/lib/auth-config'
+import { DEFAULT_DEMO_ACCOUNT, DEMO_ACCOUNTS } from '@/lib/auth-config'
 import { Mail, Lock, ArrowRight, ShieldCheck } from 'lucide-react'
 import { motion } from 'framer-motion'
 
@@ -106,18 +106,31 @@ function LoginForm() {
       <div className="mt-6 p-3 rounded-lg bg-[#0F1824] border border-[#1E2D4A]">
         <p className="flex items-center gap-2 text-xs font-medium text-[#94A3B8]">
           <ShieldCheck aria-hidden="true" className="w-3.5 h-3.5 text-[#6C63FF]" />
-          Demo account — role: Administrator
+          Demo accounts — password <span className="font-mono text-[#E2E8F0]">{DEFAULT_DEMO_ACCOUNT.password}</span>
         </p>
-        <dl className="mt-2 space-y-1 text-xs text-[#64748B] font-mono">
-          <div className="flex gap-2">
-            <dt className="w-16 shrink-0">email</dt>
-            <dd className="text-[#E2E8F0] break-all">{DEFAULT_DEMO_ACCOUNT.email}</dd>
-          </div>
-          <div className="flex gap-2">
-            <dt className="w-16 shrink-0">password</dt>
-            <dd className="text-[#E2E8F0]">{DEFAULT_DEMO_ACCOUNT.password}</dd>
-          </div>
-        </dl>
+        <p className="text-[11px] text-[#64748B] mt-1">
+          Pick a role to see how permissions, navigation and account status change.
+        </p>
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
+          {DEMO_ACCOUNTS.map((account) => (
+            <button
+              key={account.email}
+              type="button"
+              onClick={() => {
+                setEmail(account.email)
+                setPassword(account.password)
+                setError('')
+              }}
+              className={`text-[10px] font-medium px-2 py-1 rounded-full border transition-colors ${
+                email === account.email
+                  ? 'border-[#6C63FF]/50 bg-[#6C63FF]/15 text-[#6C63FF]'
+                  : 'border-[#1E2D4A] text-[#64748B] hover:text-[#94A3B8] hover:border-[#6C63FF]/30'
+              }`}
+            >
+              {account.label}
+            </button>
+          ))}
+        </div>
       </div>
     </motion.div>
   )

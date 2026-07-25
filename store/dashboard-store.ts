@@ -10,10 +10,11 @@ interface DashboardState {
   liveSignals: LiveSignal[]
   isPolling: boolean
   lastHash: string
-  selectedNav: string
   commandPaletteOpen: boolean
-  setSelectedNav: (nav: string) => void
+  /** Mobile drawer visibility — desktop uses the persisted collapse state. */
+  mobileNavOpen: boolean
   setCommandPaletteOpen: (open: boolean) => void
+  setMobileNavOpen: (open: boolean) => void
   simulateUpdate: () => void
 }
 
@@ -28,11 +29,11 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   liveSignals,
   isPolling: true,
   lastHash: hashMetrics(dashboardMetrics),
-  selectedNav: 'dashboard',
   commandPaletteOpen: false,
+  mobileNavOpen: false,
 
-  setSelectedNav: (nav) => set({ selectedNav: nav }),
   setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
+  setMobileNavOpen: (open) => set({ mobileNavOpen: open }),
 
   // BLE-style: only update if hash changed
   simulateUpdate: () => {
@@ -42,12 +43,6 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       ...state.metrics,
       lastSyncAt: new Date(),
     }
-    const newHash = hashMetrics(newMetrics)
-    if (newHash !== state.lastHash) {
-      set({ metrics: newMetrics, lastHash: newHash })
-    } else {
-      // Just update timestamp silently
-      set({ metrics: newMetrics })
-    }
+    set({ metrics: newMetrics, lastHash: hashMetrics(newMetrics) })
   },
 }))

@@ -1,12 +1,14 @@
 'use client'
 
 import { SettingsPageHeader } from '@/components/settings/page-header'
-import { mockUsers } from '@/lib/mock-data'
 import { motion } from 'framer-motion'
-import { User, Mail, Calendar, Save } from 'lucide-react'
+import { Mail, Calendar, Save, ShieldCheck } from 'lucide-react'
+import { useAuth } from '@/lib/auth-context'
+import { MemberStatusBadge } from '@/components/members/member-status-badge'
 
 export default function ProfilePage() {
-  const user = mockUsers[0] // Current user
+  const { member, role, organization } = useAuth()
+  if (!member) return null
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -15,7 +17,7 @@ export default function ProfilePage() {
         description="Manage your account settings and preferences"
       />
 
-      <div className="flex-1 overflow-y-auto px-8 py-6">
+      <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6">
         <div className="max-w-2xl space-y-6">
           {/* Profile Card */}
           <motion.div
@@ -25,15 +27,22 @@ export default function ProfilePage() {
           >
             <div className="flex items-center gap-6 mb-6">
               <div className="w-20 h-20 rounded-lg bg-[#6C63FF] flex items-center justify-center">
-                <span className="text-2xl font-bold text-white">{user.avatar}</span>
+                <span className="text-2xl font-bold text-white">{member.avatar ?? member.name.slice(0, 2).toUpperCase()}</span>
               </div>
-              <div>
-                <h2 className="text-xl font-semibold text-[#E2E8F0]">{user.name}</h2>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-xl font-semibold text-[#E2E8F0] truncate">{member.name}</h2>
+                  <MemberStatusBadge status={member.status} />
+                </div>
                 <p className="text-[#64748B] flex items-center gap-1 mt-1">
-                  <Mail className="w-4 h-4" /> {user.email}
+                  <Mail aria-hidden="true" className="w-4 h-4" /> {member.email}
                 </p>
                 <p className="text-xs text-[#64748B] flex items-center gap-1 mt-2">
-                  <Calendar className="w-4 h-4" /> Joined {new Date(user.createdAt).toLocaleDateString()}
+                  <ShieldCheck aria-hidden="true" className="w-4 h-4" /> {role?.name}
+                  {organization && <> · {organization.name}</>}
+                </p>
+                <p className="text-xs text-[#64748B] flex items-center gap-1 mt-1">
+                  <Calendar aria-hidden="true" className="w-4 h-4" /> Joined {new Date(member.createdAt).toLocaleDateString()}
                 </p>
               </div>
             </div>

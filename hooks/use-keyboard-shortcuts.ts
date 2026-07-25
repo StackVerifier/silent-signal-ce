@@ -1,50 +1,58 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useDashboardStore } from '@/store/dashboard-store'
+import { useAuth } from '@/lib/auth-context'
+import { visibleNavItems } from '@/lib/rbac/navigation'
 
-const PAGE_SHORTCUTS: Record<string, string> = {
-  '1': '/',
-  '2': '/sprint',
-  '3': '/release',
-  '4': '/qa-queue',
-  '5': '/risk-timeline',
-  '6': '/rules',
-}
-
+/**
+ * Global shortcuts. Destinations come from the RBAC navigation registry, so a
+ * shortcut can never jump to a page the member is not allowed to open.
+ *
+ * ⌘K ownership lives here only — the palette itself handles keys just while it
+ * is open, which avoids the double-toggle the two listeners used to cause.
+ */
 export function useKeyboardShortcuts() {
   const router = useRouter()
-  const { setCommandPaletteOpen, commandPaletteOpen } = useDashboardStore()
+  const setCommandPaletteOpen = useDashboardStore((state) => state.setCommandPaletteOpen)
+  const commandPaletteOpen = useDashboardStore((state) => state.commandPaletteOpen)
+  const { permissions, member } = useAuth()
+
+  const shortcuts = useMemo(() => {
+    const status = member?.status ?? 'pending'
+    return visibleNavItems(permissions, status).reduce<Record<string, string>>((map, item) => {
+      if (item.shortcut) map[item.shortcut] = item.href
+      return map
+    }, {})
+  }, [permissions, member?.status])
 
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      // Skip when typing in an input/textarea/contenteditable
-      const target = e.target as HTMLElement
+    const handler = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement
       if (
         target.tagName === 'INPUT' ||
         target.tagName === 'TEXTAREA' ||
         target.isContentEditable
       ) return
 
-      // ⌘K / Ctrl+K — command palette
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault()
+      if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
+        event.preventDefault()
         setCommandPaletteOpen(!commandPaletteOpen)
         return
       }
 
-      // Skip modified keys (avoid clash with browser shortcuts)
-      if (e.metaKey || e.ctrlKey || e.altKey) return
+      // Never shadow browser or assistive-technology shortcuts.
+      if (event.metaKey || event.ctrlKey || event.altKey || commandPaletteOpen) return
 
-      // 1–6 number shortcuts for pages
-      if (PAGE_SHORTCUTS[e.key] && !commandPaletteOpen) {
-        e.preventDefault()
-        router.push(PAGE_SHORTCUTS[e.key])
+      const href = shortcuts[event.key]
+      if (href) {
+        event.preventDefault()
+        router.push(href)
       }
     }
 
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [router, setCommandPaletteOpen, commandPaletteOpen])
+  }, [router, setCommandPaletteOpen, commandPaletteOpen, shortcuts])
 }

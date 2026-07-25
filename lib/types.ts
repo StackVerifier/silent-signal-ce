@@ -179,65 +179,15 @@ export interface DashboardMetrics {
   lastSyncAt: Date
 }
 
-// ─── Auth & User Types ────────────────────────────────────────────────────────
+// ─── Actor Types ──────────────────────────────────────────────────────────────
+// Identity, roles, org/workspace/team and permissions live in `lib/rbac/*`.
+// Only the lightweight actor projection used by domain records stays here.
 
-export type UserRole = 'admin' | 'manager' | 'lead' | 'member' | 'viewer' | 'guest'
-
-export interface User {
+export interface Actor {
   id: string
+  name: string
   email: string
-  name: string
   avatar?: string
-  role: UserRole
-  createdAt: Date
-  lastLoginAt?: Date
-  preferences: UserPreferences
-}
-
-export interface UserPreferences {
-  theme: 'light' | 'dark'
-  emailNotifications: boolean
-  desktopNotifications: boolean
-  language: string
-}
-
-export interface AuthSession {
-  userId: string
-  workspaceId: string
-  token: string
-  expiresAt: Date
-}
-
-// ─── Organization & Workspace Types ────────────────────────────────────────────
-
-export interface Workspace {
-  id: string
-  name: string
-  slug: string
-  logo?: string
-  description?: string
-  owner: User
-  members: WorkspaceMember[]
-  createdAt: Date
-  updatedAt: Date
-  settings: WorkspaceSettings
-}
-
-export interface WorkspaceMember {
-  id: string
-  userId: string
-  user: User
-  role: UserRole
-  joinedAt: Date
-  invitedBy?: User
-}
-
-export interface WorkspaceSettings {
-  isPrivate: boolean
-  twoFactorRequired: boolean
-  ssoEnabled: boolean
-  auditLoggingEnabled: boolean
-  dataRetentionDays: number
 }
 
 // ─── Integration Types ────────────────────────────────────────────────────────
@@ -275,14 +225,19 @@ export interface Notification {
 
 // ─── Audit Log Types ──────────────────────────────────────────────────────────
 
-export type AuditAction = 'create' | 'update' | 'delete' | 'invite' | 'remove' | 'export'
-export type AuditResource = 'workspace' | 'member' | 'integration' | 'rule' | 'config'
+export type AuditAction =
+  | 'create' | 'update' | 'delete' | 'invite' | 'remove' | 'export'
+  | 'approve' | 'reject' | 'suspend' | 'activate' | 'transfer' | 'permission_change'
+export type AuditResource =
+  | 'organization' | 'workspace' | 'team' | 'member' | 'invitation'
+  | 'integration' | 'rule' | 'role' | 'config'
 
 export interface AuditLog {
   id: string
-  workspaceId: string
+  organizationId: string
+  workspaceId?: string
   userId: string
-  user: User
+  user: Actor
   action: AuditAction
   resource: AuditResource
   resourceId: string
@@ -307,15 +262,4 @@ export interface BillingInfo {
     team: number
     storage: number
   }
-}
-
-// ─── Permission Helper ────────────────────────────────────────────────────────
-
-export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
-  admin: ['manage:workspace', 'manage:members', 'manage:billing', 'manage:integrations', 'view:audit', 'edit:rules', 'view:all'],
-  manager: ['edit:rules', 'manage:members', 'view:audit', 'view:all', 'export:data'],
-  lead: ['edit:rules', 'export:data', 'view:all'],
-  member: ['view:all', 'edit:own'],
-  viewer: ['view:all'],
-  guest: ['view:dashboard'],
 }

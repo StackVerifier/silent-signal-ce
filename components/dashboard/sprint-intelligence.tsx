@@ -214,7 +214,7 @@ function SprintHealthPanel({ sprint }: { sprint: typeof sprints[0] }) {
             </div>
           )}
 
-          <div className="mt-4 pt-4 border-t border-[#1E2D4A] grid grid-cols-3 gap-3">
+          <div className="mt-4 pt-4 border-t border-[#1E2D4A] grid grid-cols-1 sm:grid-cols-3 gap-3">
             {[
               { label: 'Total', value: sprint.totalPoints, color: '#E2E8F0' },
               { label: 'Done', value: sprint.completedPoints, color: '#22C55E' },
@@ -244,7 +244,7 @@ export function SprintIntelligence() {
   ).sort((a, b) => b.riskScore - a.riskScore)
 
   return (
-    <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-[1600px] mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>

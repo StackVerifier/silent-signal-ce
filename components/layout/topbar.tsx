@@ -1,21 +1,11 @@
 'use client'
 
-import { Bell, RefreshCw, Wifi, LogOut } from 'lucide-react'
-import { useRouter } from 'next/navigation'
+import { Bell, RefreshCw, Wifi, Menu } from 'lucide-react'
 import { useDashboardStore } from '@/store/dashboard-store'
 import { useAuth } from '@/lib/auth-context'
-import { getRoleLabel } from '@/lib/permissions'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-
-function initialsOf(name: string) {
-  return name
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('')
-}
+import { Breadcrumb } from './breadcrumb'
 
 function useRelativeTime(date: Date) {
   const [label, setLabel] = useState('')
@@ -34,22 +24,19 @@ function useRelativeTime(date: Date) {
   return label
 }
 
-export function Topbar({ title }: { title: string }) {
-  const { metrics, liveSignals, simulateUpdate } = useDashboardStore()
-  const { user, logout } = useAuth()
-  const router = useRouter()
+export function Topbar({ title, trailing }: { title: string; trailing?: string }) {
+  const metrics = useDashboardStore((state) => state.metrics)
+  const liveSignals = useDashboardStore((state) => state.liveSignals)
+  const simulateUpdate = useDashboardStore((state) => state.simulateUpdate)
+  const { isGated } = useAuth()
   const syncLabel = useRelativeTime(metrics.lastSyncAt)
   const [syncing, setSyncing] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
-  const [userOpen, setUserOpen] = useState(false)
-
-  const handleLogout = () => {
-    logout()
-    setUserOpen(false)
-    router.replace('/auth/login')
-    router.refresh()
-  }
-  const criticalSignals = liveSignals.filter(s => s.severity === 'critical' || s.severity === 'high')
+  const setMobileNavOpen = useDashboardStore((state) => state.setMobileNavOpen)
+  const notifRef = useRef<HTMLDivElement>(null)
+  const criticalSignals = isGated
+    ? []
+    : liveSignals.filter(s => s.severity === 'critical' || s.severity === 'high')
 
   const handleSync = () => {
     setSyncing(true)
@@ -65,15 +52,51 @@ export function Topbar({ title }: { title: string }) {
     return () => clearInterval(interval)
   }, [simulateUpdate])
 
+  // Dismiss the notification panel on outside click or Escape.
+  useEffect(() => {
+    if (!notifOpen) return
+    const onPointerDown = (event: MouseEvent) => {
+      if (!notifRef.current?.contains(event.target as Node)) setNotifOpen(false)
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setNotifOpen(false)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [notifOpen])
+
   return (
-    <header className="h-14 flex items-center justify-between px-6 border-b border-[#1E2D4A] bg-[#070B18]/80 backdrop-blur-sm flex-shrink-0 sticky top-0 z-10">
-      <div className="flex items-center gap-3">
-        <h1 className="text-sm font-semibold text-[#E2E8F0]">{title}</h1>
-        <div className="flex items-center gap-1.5">
-          <span className="inline-flex items-center gap-1 text-[10px] text-[#22C55E] bg-[#22C55E]/10 border border-[#22C55E]/20 px-2 py-0.5 rounded-full">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E] pulse-dot inline-block" />
-            Live
-          </span>
+    <header className="h-14 flex items-center justify-between gap-3 px-4 sm:px-6 border-b border-[#1E2D4A] bg-[#070B18]/80 backdrop-blur-sm flex-shrink-0 sticky top-0 z-10">
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        <button
+          onClick={() => setMobileNavOpen(true)}
+          aria-label="Open navigation"
+          aria-controls="app-sidebar"
+          className="lg:hidden -ml-1 flex items-center justify-center w-11 h-11 rounded-lg text-[#94A3B8] hover:text-[#E2E8F0] hover:bg-[#151D32] transition-colors"
+        >
+          <Menu aria-hidden="true" className="w-5 h-5" />
+        </button>
+
+        <div className="min-w-0">
+          <h1 className="text-sm font-semibold text-[#E2E8F0] truncate">{title}</h1>
+          <Breadcrumb trailing={trailing} />
+        </div>
+
+        <div className="hidden sm:flex items-center gap-1.5 shrink-0">
+          {isGated ? (
+            <span className="inline-flex items-center gap-1 text-[10px] text-[#F59E0B] bg-[#F59E0B]/10 border border-[#F59E0B]/20 px-2 py-0.5 rounded-full">
+              Locked
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-[10px] text-[#22C55E] bg-[#22C55E]/10 border border-[#22C55E]/20 px-2 py-0.5 rounded-full">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E] pulse-dot inline-block" />
+              Live
+            </span>
+          )}
         </div>
       </div>
 
@@ -88,7 +111,7 @@ export function Topbar({ title }: { title: string }) {
         <button
           onClick={handleSync}
           disabled={syncing}
-          className="flex items-center gap-1.5 text-xs text-[#64748B] hover:text-[#94A3B8] transition-colors px-2 py-1.5 rounded-lg hover:bg-[#151D32]"
+          className="flex items-center justify-center gap-1.5 text-xs text-[#64748B] hover:text-[#94A3B8] transition-colors min-h-11 sm:min-h-0 px-2.5 sm:py-1.5 rounded-lg hover:bg-[#151D32]"
           aria-label="Sync data"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
@@ -96,11 +119,12 @@ export function Topbar({ title }: { title: string }) {
         </button>
 
         {/* Notifications */}
-        <div className="relative">
+        <div className="relative" ref={notifRef}>
           <button
             onClick={() => setNotifOpen(!notifOpen)}
-            className="relative flex items-center justify-center w-8 h-8 rounded-lg hover:bg-[#151D32] text-[#64748B] hover:text-[#94A3B8] transition-all"
-            aria-label="Notifications"
+            className="relative flex items-center justify-center w-11 h-11 sm:w-8 sm:h-8 rounded-lg hover:bg-[#151D32] text-[#64748B] hover:text-[#94A3B8] transition-colors"
+            aria-label={`Notifications${criticalSignals.length ? `, ${criticalSignals.length} active` : ''}`}
+            aria-expanded={notifOpen}
           >
             <Bell className="w-4 h-4" />
             {criticalSignals.length > 0 && (
@@ -115,13 +139,18 @@ export function Topbar({ title }: { title: string }) {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 8, scale: 0.95 }}
                 transition={{ duration: 0.15 }}
-                className="absolute right-0 top-10 w-80 bg-[#111827] border border-[#1E2D4A] rounded-xl shadow-2xl overflow-hidden z-50"
+                className="absolute right-0 top-10 w-[min(20rem,calc(100vw-2rem))] bg-[#111827] border border-[#1E2D4A] rounded-xl shadow-2xl overflow-hidden z-50"
               >
                 <div className="px-4 py-3 border-b border-[#1E2D4A] flex items-center justify-between">
                   <span className="text-sm font-semibold text-[#E2E8F0]">Active Signals</span>
                   <span className="text-xs text-[#64748B]">{criticalSignals.length} alerts</span>
                 </div>
-                <div className="max-h-64 overflow-y-auto">
+                <div className="max-h-64 overflow-y-auto no-scrollbar">
+                  {criticalSignals.length === 0 && (
+                    <p className="px-4 py-8 text-center text-xs text-[#64748B]">
+                      {isGated ? 'Signals unlock once your account is approved.' : 'No active signals right now.'}
+                    </p>
+                  )}
                   {criticalSignals.slice(0, 5).map(s => (
                     <div key={s.id} className="px-4 py-3 border-b border-[#1E2D4A]/50 hover:bg-[#151D32] transition-colors">
                       <div className="flex items-start gap-2">
@@ -144,44 +173,6 @@ export function Topbar({ title }: { title: string }) {
           </AnimatePresence>
         </div>
 
-        {/* User menu */}
-        <div className="relative">
-          <button
-            onClick={() => setUserOpen(!userOpen)}
-            aria-label="Account menu"
-            aria-expanded={userOpen}
-            className="w-7 h-7 rounded-full bg-[#6C63FF]/20 border border-[#6C63FF]/40 flex items-center justify-center text-[10px] font-bold text-[#6C63FF] hover:bg-[#6C63FF]/30 transition-colors"
-          >
-            {user ? initialsOf(user.name) : '—'}
-          </button>
-
-          <AnimatePresence>
-            {userOpen && user && (
-              <motion.div
-                initial={{ opacity: 0, y: 8, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 8, scale: 0.95 }}
-                transition={{ duration: 0.15 }}
-                className="absolute right-0 top-10 w-56 bg-[#111827] border border-[#1E2D4A] rounded-xl shadow-2xl overflow-hidden z-50"
-              >
-                <div className="px-4 py-3 border-b border-[#1E2D4A]">
-                  <p className="text-sm font-semibold text-[#E2E8F0] truncate">{user.name}</p>
-                  <p className="text-xs text-[#64748B] truncate">{user.email}</p>
-                  <span className="mt-2 inline-block text-[10px] font-medium text-[#6C63FF] bg-[#6C63FF]/10 px-2 py-0.5 rounded-full">
-                    {getRoleLabel(user.role)}
-                  </span>
-                </div>
-                <button
-                  onClick={handleLogout}
-                  className="w-full flex items-center gap-2 px-4 py-3 text-sm text-[#94A3B8] hover:bg-[#151D32] hover:text-[#E2E8F0] transition-colors"
-                >
-                  <LogOut aria-hidden="true" className="w-4 h-4" />
-                  Sign out
-                </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
       </div>
     </header>
   )
