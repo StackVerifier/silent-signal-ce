@@ -37,7 +37,9 @@ export default function RootLayout({
     <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable} bg-[#070B18] font-sans`}>
       <body className="antialiased font-sans">
         <Providers>{children}</Providers>
-        {process.env.NODE_ENV === 'production' && <Analytics />}
+        {/* The endpoint only exists on Vercel; anywhere else the script 404s
+            on every page load. */}
+        {process.env.VERCEL === '1' && <Analytics />}
       </body>
     </html>
   )

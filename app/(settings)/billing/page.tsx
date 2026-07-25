@@ -1,5 +1,6 @@
 'use client'
 
+import { useNow } from '@/hooks/use-now'
 import { SettingsPageHeader } from '@/components/settings/page-header'
 import { useBilling } from '@/lib/query/hooks'
 import { motion } from 'framer-motion'
@@ -11,10 +12,11 @@ const PLAN_FEATURES: Record<string, string[]> = {
 }
 
 export default function BillingPage() {
+  const now = useNow()
   const billing = useBilling().data
   if (!billing) return null
   const daysUntilNextBilling = Math.ceil(
-    (new Date(billing.nextBillingDate || Date.now()).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+    (new Date(billing.nextBillingDate || now).getTime() - now) / (1000 * 60 * 60 * 24)
   )
 
   return (

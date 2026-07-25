@@ -8,8 +8,11 @@ import {
 } from 'lucide-react'
 import { SectionCard } from './shared'
 import { useRiskTimeline, useSignals } from '@/lib/query/hooks'
-import type { RiskTimelineEvent, Severity } from '@/lib/types'
+import type { RiskTimelineEvent } from '@/lib/types'
 import { cn } from '@/lib/utils'
+
+/** Where the trend line starts before any event is applied. */
+const STARTING_RISK_SCORE = 65
 
 function EventIcon({ type }: { type: RiskTimelineEvent['type'] }) {
   switch (type) {
@@ -24,7 +27,7 @@ function EventIcon({ type }: { type: RiskTimelineEvent['type'] }) {
   }
 }
 
-function EventDot({ type, severity }: { type: RiskTimelineEvent['type']; severity: RiskTimelineEvent['severity'] }) {
+function EventDot({ type }: { type: RiskTimelineEvent['type'] }) {
   const colors: Record<string, string> = {
     'risk-increase': '#EF4444',
     'risk-decrease': '#22C55E',
@@ -47,11 +50,18 @@ function RiskScoreChart() {
   const riskTimeline = useRiskTimeline().data ?? []
   // Build timeline risk trend from events (running sum)
   const events = [...riskTimeline].reverse()
-  let score = 65
-  const points = events.map(e => {
-    score = Math.max(0, Math.min(100, score + e.riskDelta))
-    return { date: e.date, score, type: e.type }
-  })
+  const points = events.reduce<{ date: RiskTimelineEvent['date']; score: number; type: RiskTimelineEvent['type'] }[]>(
+    (acc, event) => {
+      const previous = acc.at(-1)?.score ?? STARTING_RISK_SCORE
+      acc.push({
+        date: event.date,
+        score: Math.max(0, Math.min(100, previous + event.riskDelta)),
+        type: event.type,
+      })
+      return acc
+    },
+    [],
+  )
 
   const maxScore = 100
   const width = 100 / (points.length - 1)
@@ -142,7 +152,7 @@ function TimelineItem({ event, index }: { event: RiskTimelineEvent; index: numbe
     >
       {/* Timeline spine */}
       <div className="flex flex-col items-center">
-        <EventDot type={event.type} severity={event.severity} />
+        <EventDot type={event.type} />
         <div className="w-px flex-1 bg-[#1E2D4A] mt-2 min-h-[32px]" />
       </div>
 

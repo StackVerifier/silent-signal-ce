@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { parseBody, route } from '@/lib/api/handler'
 import { webhookRepo } from '@/lib/db/repositories'
 import { PERMISSIONS } from '@/lib/rbac/permissions'
+import { checkWebhookUrl } from '@/lib/notifications/webhook-url'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,41 +18,18 @@ const quietHoursSchema = z
   .nullable()
   .optional()
 
-/**
- * A webhook URL must be https and must belong to the provider it claims to be.
- * Without the host check, a mistyped Slack URL would silently POST the alert —
- * including issue titles — to whatever host was pasted.
- */
-const HOST_PATTERNS: Record<string, RegExp> = {
-  slack: /^hooks\.slack\.com$/i,
-  teams: /(^|\.)(office|microsoft|office365|webhook\.office)\.com$/i,
-}
-
-const urlSchema = z.string().url('Enter a valid URL').refine(
-  (value) => value.startsWith('https://'),
-  'The URL must use https',
-)
-
 const createSchema = z.object({
   channel: z.enum(['slack', 'teams', 'email']),
   label: z.string().min(1, 'Give this destination a name').max(80),
-  url: urlSchema,
+  url: z.string().min(1, 'Enter a webhook URL'),
   minimumLevel: z.enum(['low', 'medium', 'high', 'critical']),
   enabled: z.boolean().default(true),
   quietHours: quietHoursSchema,
 }).superRefine((value, ctx) => {
-  const pattern = HOST_PATTERNS[value.channel]
-  if (!pattern) return
-  const host = (() => { try { return new URL(value.url).host } catch { return '' } })()
-  if (!pattern.test(host)) {
-    ctx.addIssue({
-      code: 'custom',
-      path: ['url'],
-      message: value.channel === 'slack'
-        ? 'A Slack webhook URL must be on hooks.slack.com'
-        : 'A Teams webhook URL must be on an Office 365 host',
-    })
-  }
+  // The host check is the security-relevant part and lives in one module, so
+  // the browser and this handler can never drift apart on what is acceptable.
+  const problem = checkWebhookUrl(value.channel, value.url)
+  if (problem) ctx.addIssue({ code: 'custom', path: ['url'], message: problem.message })
 })
 
 export const POST = route({ permission: PERMISSIONS.NOTIFICATIONS_WRITE }, async (context, request) => {

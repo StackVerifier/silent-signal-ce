@@ -83,6 +83,9 @@ export const config = {
   // session redirect here would 307 every scheduled run to the login page.
   // Each route handler authorizes its own caller.
   matcher: [
-    '/((?!api/|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
+    // `_vercel` is the platform's own namespace (analytics, speed insights).
+    // Redirecting it to the login page turns every request into a 404 that the
+    // browser then refuses as an HTML document served where a script belongs.
+    '/((?!api/|_next/static|_next/image|_vercel/|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
   ],
 }

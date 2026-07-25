@@ -4,29 +4,23 @@ import { RefreshCw, Wifi, Menu } from 'lucide-react'
 import { useDashboardStore } from '@/store/dashboard-store'
 import { useDashboardSnapshot } from '@/lib/query/hooks'
 import { useAuth } from '@/lib/auth-context'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useNow } from '@/hooks/use-now'
 import { Breadcrumb } from './breadcrumb'
 import { NotificationCenter } from '@/components/notifications/notification-center'
 
+/**
+ * "3m ago", re-rendered on a ticking clock rather than by writing state from an
+ * effect — the label is a pure function of (now, date).
+ */
 function useRelativeTime(date: Date | null | undefined) {
-  const [label, setLabel] = useState('')
-  useEffect(() => {
-    if (!date) {
-      setLabel('never')
-      return
-    }
-    const update = () => {
-      const diff = Math.floor((Date.now() - date.getTime()) / 1000)
-      if (diff < 5)   setLabel('just now')
-      else if (diff < 60)  setLabel(`${diff}s ago`)
-      else if (diff < 3600) setLabel(`${Math.floor(diff / 60)}m ago`)
-      else             setLabel(`${Math.floor(diff / 3600)}h ago`)
-    }
-    update()
-    const t = setInterval(update, 5000)
-    return () => clearInterval(t)
-  }, [date])
-  return label
+  const now = useNow(5_000)
+  if (!date) return 'never'
+  const diff = Math.floor((now - date.getTime()) / 1000)
+  if (diff < 5) return 'just now'
+  if (diff < 60) return `${diff}s ago`
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
+  return `${Math.floor(diff / 3600)}h ago`
 }
 
 export function Topbar({ title, trailing }: { title: string; trailing?: string }) {

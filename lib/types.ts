@@ -211,7 +211,7 @@ export interface Integration {
   type: IntegrationType
   name: string
   enabled: boolean
-  config: Record<string, any>
+  config: Record<string, unknown>
   lastSyncAt?: Date
   createdAt: Date
 }
@@ -252,8 +252,8 @@ export interface AuditLog {
   action: AuditAction
   resource: AuditResource
   resourceId: string
-  changes?: Record<string, { before: any; after: any }>
-  metadata?: Record<string, any>
+  changes?: Record<string, { before: unknown; after: unknown }>
+  metadata?: Record<string, unknown>
   createdAt: Date
 }
 

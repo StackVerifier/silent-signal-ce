@@ -4,8 +4,9 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { ChevronLeft, ChevronRight, Search, LogOut, Lock, X } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import { useIsDesktop } from '@/hooks/use-media-query'
+import { usePersistentFlag } from '@/hooks/use-persistent-flag'
 import { cn } from '@/lib/utils'
 import { useDashboardStore } from '@/store/dashboard-store'
 import { useAuth } from '@/lib/auth-context'
@@ -36,16 +37,12 @@ export function Sidebar() {
   const setMobileNavOpen = useDashboardStore((state) => state.setMobileNavOpen)
   const { permissions, member, role, isGated, logout } = useAuth()
   const isDesktop = useIsDesktop()
-  const [collapsed, setCollapsed] = useState(false)
+  // Expanded on the server, so the markup is deterministic; the stored
+  // preference is read during the first client render.
+  const [collapsed, setCollapsed] = usePersistentFlag(COLLAPSE_STORAGE_KEY, false)
 
   // The drawer only collapses on desktop; on mobile it is always full width.
   const showLabels = !collapsed || !isDesktop
-
-  // Read the persisted preference after mount to avoid a hydration mismatch,
-  // while still rendering the sidebar on the server (no layout shift).
-  useEffect(() => {
-    setCollapsed(localStorage.getItem(COLLAPSE_STORAGE_KEY) === '1')
-  }, [])
 
   // Close the drawer whenever navigation happens, so a tap never leaves it open.
   useEffect(() => {
@@ -53,11 +50,8 @@ export function Sidebar() {
   }, [pathname, setMobileNavOpen])
 
   const toggleCollapsed = useCallback(() => {
-    setCollapsed((current) => {
-      localStorage.setItem(COLLAPSE_STORAGE_KEY, current ? '0' : '1')
-      return !current
-    })
-  }, [])
+    setCollapsed((current) => !current)
+  }, [setCollapsed])
 
   const status = member?.status ?? 'pending'
   const navItems = useMemo(

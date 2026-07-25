@@ -39,7 +39,7 @@ There are also demo personas for seeing each role's view, password `admin123`:
 | `faruk@boyner.com.tr` | Pending | The locked, skeleton-only experience |
 | `hakan@boyner.com.tr` | Suspended | The account-suspended screen |
 
-> Sessions are issued server-side and the cookie is `httpOnly`; passwords are verified against a stored scrypt hash. What is still missing for production is the surrounding lifecycle — email verification, password reset, rate limiting on the login endpoint.
+> Sessions are issued server-side and the cookie is `httpOnly`; passwords are verified against a stored scrypt hash, and the login endpoint is rate limited per account and per address. What is still missing is the surrounding lifecycle — email verification and password reset.
 
 ## All commands
 
@@ -50,8 +50,13 @@ There are also demo personas for seeing each role's view, password `admin123`:
 | `pnpm start` | Serve a production build |
 | `pnpm db:seed` | Create both databases if missing (never overwrites app data) |
 | `pnpm db:reset` | Rebuild the application database from seed content (destructive) |
+| `pnpm test` | Vitest, once |
+| `pnpm test:watch` | Vitest in watch mode |
 | `pnpm typecheck` | `tsc --noEmit` |
 | `pnpm lint` | ESLint |
+
+CI runs all four gates — typecheck, lint, test, build — on every push and pull
+request (`.github/workflows/ci.yml`).
 
 ### Exercising the scheduler
 
@@ -83,6 +88,7 @@ lib/query/           TanStack Query client, key registry, hooks
 lib/db/              driver (SQLite or Postgres), repositories, encryption
 lib/auth/            password hashing
 services/            one module per domain — thin HTTP clients
+tests/               Vitest, on the logic where being wrong is expensive
 app/api/             route handlers; the security boundary
 db/content/          seed content and help articles
 scripts/             seeding
@@ -107,6 +113,7 @@ Three ideas carry most of the design:
 ## Current limitations
 
 - **SQLite does not persist on serverless.** Use `DATABASE_URL` with a hosted Postgres for any deployment that needs data to survive. `docs/database.md` explains why.
-- **Auth lifecycle is incomplete.** Passwords are hashed and sessions are server-issued, but there is no email verification, password reset or login rate limiting yet.
+- **Auth lifecycle is incomplete.** Passwords are hashed, sessions are server-issued and logins are rate limited, but there is no email verification or password reset yet — both need an email provider.
+- **Rate limiting is per process.** One server counts exactly; behind several instances each counts separately, so the effective limit multiplies by the instance count. A shared store is the upgrade path, and `lib/auth/rate-limit.ts` says so at the top.
 - **Jira sync is not implemented.** The integration connects and the endpoints exist; the sync itself returns an honest "credentials not configured" rather than inventing data.
 - **Billing and support forms are inert.** Both need a real backend, and wiring them to fixtures would be theatre.

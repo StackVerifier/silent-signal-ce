@@ -1,5 +1,5 @@
 {
-  "name": "my-project",
+  "name": "silent-signal",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -8,9 +8,11 @@
     "build": "next build",
     "prebuild": "node --experimental-strip-types scripts/seed-help.mjs && node --experimental-strip-types scripts/seed-app.mjs",
     "start": "next start",
-    "db:seed": "node --experimental-strip-types scripts/seed-help.mjs && node --experimental-strip-types scripts/seed-app.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
+    "db:seed": "node --experimental-strip-types scripts/seed-help.mjs && node --experimental-strip-types scripts/seed-app.mjs",
     "db:reset": "node --experimental-strip-types scripts/seed-help.mjs && node --experimental-strip-types scripts/seed-app.mjs --force"
   },
   "dependencies": {
@@ -35,14 +37,18 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.3.6",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^24",
     "@types/pg": "^8.20.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.2.12",
     "postcss": "^8.5",
     "tailwindcss": "^4.3.3",
-    "typescript": "5.7.3"
+    "typescript": "5.7.3",
+    "vitest": "^3.2.7"
   },
   "pnpm": {
     "overrides": {

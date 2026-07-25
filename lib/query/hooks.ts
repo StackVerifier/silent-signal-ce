@@ -31,11 +31,6 @@ function useGate(permission: Permission) {
 
 type Options<T> = Omit<UseQueryOptions<T, Error, T>, 'queryKey' | 'queryFn' | 'enabled'>
 
-/** Every mutation records the acting member, which is what makes audit real. */
-function useActorId() {
-  return useAuth().member?.id ?? 'mem-1'
-}
-
 // ─── Delivery ─────────────────────────────────────────────────────────────────
 
 export function useDashboardSnapshot(options?: Options<Awaited<ReturnType<typeof dashboardService.getSnapshot>>>) {
@@ -180,7 +175,6 @@ export function useJiraFieldMapping() {
 export function useConnectJira() {
   const queryClient = useQueryClient()
   const { workspace } = useAuth()
-  const actorId = useActorId()
   return useMutation({
     mutationFn: () => jiraService.connect(workspace?.id),
     onSuccess: () => {
@@ -193,7 +187,6 @@ export function useConnectJira() {
 export function useDisconnectJira() {
   const queryClient = useQueryClient()
   const { workspace } = useAuth()
-  const actorId = useActorId()
   return useMutation({
     mutationFn: () => jiraService.disconnect(workspace?.id),
     onSuccess: () => {
@@ -269,7 +262,6 @@ type MemberAction = 'approve' | 'reject' | 'suspend' | 'activate' | 'remove'
 
 export function useMemberAction() {
   const queryClient = useQueryClient()
-  const actorId = useActorId()
   return useMutation({
     mutationFn: async ({ memberId, action }: { memberId: string; action: MemberAction }): Promise<void> => {
       await memberService.act(memberId, action)
@@ -284,7 +276,6 @@ export function useMemberAction() {
 
 export function useBulkMemberAction() {
   const queryClient = useQueryClient()
-  const actorId = useActorId()
   return useMutation({
     // No bulk endpoint: each action is audited individually, and a partial
     // failure must leave the successful ones applied.
@@ -301,7 +292,6 @@ export function useBulkMemberAction() {
 
 export function useInviteMember() {
   const queryClient = useQueryClient()
-  const actorId = useActorId()
   return useMutation({
     mutationFn: (input: { email: string; roleId: RoleId; workspaceId: string; teamId?: string }) =>
       memberService.invite(input),
@@ -314,7 +304,6 @@ export function useInviteMember() {
 
 export function useInvitationAction() {
   const queryClient = useQueryClient()
-  const actorId = useActorId()
   return useMutation({
     mutationFn: ({ invitationId, action }: { invitationId: string; action: 'resend' | 'cancel' }) =>
       memberService.invitationAction(invitationId, action),
@@ -327,7 +316,6 @@ export function useInvitationAction() {
 
 export function useCreateTeam() {
   const queryClient = useQueryClient()
-  const actorId = useActorId()
   return useMutation({
     mutationFn: (input: {
       name: string; workspaceId: string; description?: string
@@ -342,7 +330,6 @@ export function useCreateTeam() {
 
 export function useUpdateTeam() {
   const queryClient = useQueryClient()
-  const actorId = useActorId()
   return useMutation({
     mutationFn: ({ teamId, patch }: { teamId: string; patch: Partial<Team> }) =>
       memberService.updateTeam(teamId, patch),
@@ -355,7 +342,6 @@ export function useUpdateTeam() {
 
 export function useDeleteTeam() {
   const queryClient = useQueryClient()
-  const actorId = useActorId()
   return useMutation({
     mutationFn: (teamId: string) => memberService.deleteTeam(teamId),
     onSuccess: () => {
@@ -368,7 +354,6 @@ export function useDeleteTeam() {
 
 export function useSetTeamMembers() {
   const queryClient = useQueryClient()
-  const actorId = useActorId()
   return useMutation({
     mutationFn: ({ teamId, memberIds }: { teamId: string; memberIds: string[] }) =>
       memberService.setTeamMembers(teamId, memberIds),
