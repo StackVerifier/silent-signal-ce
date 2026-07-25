@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
+import { zodResolver } from '@/lib/forms/zod-resolver'
 import { z } from 'zod'
 import { Dialog, DialogButton } from '@/components/ui/dialog'
 import { SelectField, TextField } from '@/components/forms/fields'

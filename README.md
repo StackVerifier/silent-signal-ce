@@ -58,6 +58,17 @@ There are also demo personas for seeing each role's view, password `admin123`:
 CI runs all four gates — typecheck, lint, test, build — on every push and pull
 request (`.github/workflows/ci.yml`).
 
+### Dependency policy
+
+`pnpm-workspace.yaml` sets `minimumReleaseAge: 1440` — nothing published in the
+last 24 hours is installed. A compromised publish is usually caught within
+hours, so the wait removes most of that window at no real cost, and it keeps
+the committed lockfile installable for anyone running the same policy.
+
+Settings live in `pnpm-workspace.yaml`, not in a `pnpm` field in
+`package.json`: pnpm 10 ignores that field silently, which is worse than not
+setting it at all, because the lockfile then depends on who ran the install.
+
 ### Exercising the scheduler
 
 Background jobs run on an HTTP trigger. In development no `CRON_SECRET` is needed:
@@ -86,7 +97,8 @@ components/          UI, split by feature (rbac, members, teams, help, layout)
 lib/rbac/            permissions, roles, access engine, navigation registry
 lib/query/           TanStack Query client, key registry, hooks
 lib/db/              driver (SQLite or Postgres), repositories, encryption
-lib/auth/            password hashing
+lib/auth/            password hashing, login rate limiting
+lib/forms/           the Zod ↔ React Hook Form resolver
 services/            one module per domain — thin HTTP clients
 tests/               Vitest, on the logic where being wrong is expensive
 app/api/             route handlers; the security boundary

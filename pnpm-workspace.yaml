@@ -1,0 +1,17 @@
+# pnpm settings.
+#
+# pnpm 10 no longer reads the `pnpm` field in package.json — a setting left
+# there is silently ignored, which is worse than not having it, because the
+# lockfile then differs depending on who ran the install.
+
+# Do not install a version published less than 24 hours ago (value is minutes).
+#
+# A compromised publish is usually caught and unpublished within hours, so
+# waiting a day removes most of that window at almost no cost — nothing here
+# needs a release the day it ships. It also keeps the lockfile installable for
+# anyone running the same policy: a `pnpm add` that quietly pulled in a
+# hours-old release would fail their supply-chain check, not ours.
+minimumReleaseAge: 1440
+
+overrides:
+  hono: 4.12.25

@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
+import { zodResolver } from '@/lib/forms/zod-resolver'
 import { z } from 'zod'
 import { KeyRound } from 'lucide-react'
 import { Dialog, DialogButton } from '@/components/ui/dialog'

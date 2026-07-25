@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
+import { zodResolver } from '@/lib/forms/zod-resolver'
 import { z } from 'zod'
 import { Send } from 'lucide-react'
 import { Dialog, DialogButton } from '@/components/ui/dialog'
