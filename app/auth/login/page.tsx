@@ -27,6 +27,18 @@ export default function LoginPage() {
     }
   }
 
+  const handleDemoLogin = async () => {
+    setEmail('alice@company.com')
+    setPassword('demo123')
+    setError('')
+    try {
+      await login('alice@company.com', 'demo123')
+      router.push('/')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Login failed')
+    }
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -78,6 +90,15 @@ export default function LoginPage() {
           className="w-full bg-[#6C63FF] hover:bg-[#5B52CC] disabled:bg-[#64748B] text-white font-medium py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2"
         >
           {isLoading ? 'Signing in...' : <>Sign In<ArrowRight className="w-4 h-4" /></>}
+        </button>
+
+        <button
+          type="button"
+          onClick={handleDemoLogin}
+          disabled={isLoading}
+          className="w-full bg-[#1E2D4A] hover:bg-[#2A3D54] disabled:bg-[#64748B] text-[#94A3B8] font-medium py-2.5 rounded-lg transition-colors border border-[#1E2D4A]"
+        >
+          Demo Admin Login
         </button>
       </form>
 
