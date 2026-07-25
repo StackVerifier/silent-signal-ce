@@ -110,8 +110,29 @@ function translate(sql: string): string {
   return toPositional(text)
 }
 
+/**
+ * Loaded at call time, not bundled (see `serverExternalPackages` in
+ * next.config.mjs). If the package is genuinely absent the failure is a bare
+ * MODULE_NOT_FOUND, which reads like a bug in the application rather than a
+ * missing install — so it is translated into something actionable.
+ */
+async function loadPg(): Promise<typeof import('pg')> {
+  try {
+    return await import('pg')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === 'MODULE_NOT_FOUND') {
+      throw new Error(
+        'DATABASE_URL is set, which selects Postgres, but the `pg` package is not installed. ' +
+        'Run `pnpm install`, or unset DATABASE_URL to use the local SQLite file.',
+        { cause: error },
+      )
+    }
+    throw error
+  }
+}
+
 async function createPostgresDriver(): Promise<Driver> {
-  const { Pool } = await import('pg')
+  const { Pool } = await loadPg()
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     // Managed Postgres almost always requires TLS; a local one almost never has it.
