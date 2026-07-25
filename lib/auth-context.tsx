@@ -1,71 +1,104 @@
 'use client'
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
-import type { AuthSession, User, Workspace } from './types'
-import { ROLE_PERMISSIONS } from './types'
 import {
   SESSION_COOKIE,
   SESSION_STORAGE_KEY,
   SESSION_TTL_MS,
-  buildUserFromAccount,
+  encodeClaims,
   findDemoAccount,
+  type SessionClaims,
 } from './auth-config'
+import {
+  mockMembers,
+  mockOrganization,
+  mockWorkspaces,
+  workspacesForMember,
+} from './mock-tenancy'
+import {
+  STATUS_CAN_AUTHENTICATE,
+  buildAccessContext,
+  can,
+  canAll,
+  canAny,
+} from './rbac/access'
+import type { Permission } from './rbac/permissions'
+import type { AccessContext, Member, Organization, RoleDefinition, Workspace } from './rbac/types'
 
 interface AuthContextType {
-  session: AuthSession | null
-  user: User | null
+  /** Null while loading or signed out. */
+  access: AccessContext | null
+  member: Member | null
+  organization: Organization | null
   workspace: Workspace | null
+  /** Workspaces the signed-in member can switch between. */
+  workspaces: Workspace[]
+  role: RoleDefinition | null
+  permissions: Permission[]
   isLoading: boolean
+  isAuthenticated: boolean
+  /** True when the account cannot see data yet (pending/suspended). */
+  isGated: boolean
+  can: (permission: Permission) => boolean
+  canAny: (permissions: Permission[]) => boolean
+  canAll: (permissions: Permission[]) => boolean
   login: (email: string, password: string) => Promise<void>
   logout: () => void
-  isAuthenticated: boolean
-  canAccess: (permission: string) => boolean
+  switchWorkspace: (workspaceId: string) => void
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 /**
- * Mirrors the session into a cookie so `middleware.ts` can gate routes before
- * React hydrates. It is intentionally NOT httpOnly because the mock login runs
- * in the browser; a real implementation must issue this cookie server-side.
+ * Mirrors session claims into a cookie so `middleware.ts` can gate routes before
+ * React hydrates. Not httpOnly because the mock login runs in the browser; a
+ * real implementation issues this cookie server-side.
  */
-function writeSessionCookie(expiresAt: Date) {
+function writeSessionCookie(claims: SessionClaims) {
   const secure = window.location.protocol === 'https:' ? '; Secure' : ''
-  document.cookie = `${SESSION_COOKIE}=1; Path=/; Expires=${expiresAt.toUTCString()}; SameSite=Lax${secure}`
+  const expires = new Date(claims.expiresAt).toUTCString()
+  document.cookie = `${SESSION_COOKIE}=${encodeClaims(claims)}; Path=/; Expires=${expires}; SameSite=Lax${secure}`
 }
 
 function clearSessionCookie() {
   document.cookie = `${SESSION_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`
 }
 
-function buildWorkspace(owner: User): Workspace {
+function resolveSession(memberId: string, workspaceId: string | null) {
+  const member = mockMembers.find((candidate) => candidate.id === memberId)
+  if (!member) return null
+
+  const available = workspacesForMember(member)
+  const workspace =
+    available.find((candidate) => candidate.id === workspaceId) ?? available[0] ?? null
+
   return {
-    id: 'ws-1',
-    name: 'Silent Signal Demo',
-    slug: 'demo',
-    owner,
-    members: [
-      { id: 'wm-1', userId: owner.id, user: owner, role: owner.role, joinedAt: new Date() },
-    ],
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    settings: {
-      isPrivate: false,
-      twoFactorRequired: false,
-      ssoEnabled: false,
-      auditLoggingEnabled: true,
-      dataRetentionDays: 90,
-    },
+    member,
+    workspace,
+    workspaces: available,
+    access: buildAccessContext({ member, organization: mockOrganization, workspace }),
   }
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [session, setSession] = useState<AuthSession | null>(null)
-  const [user, setUser] = useState<User | null>(null)
-  const [workspace, setWorkspace] = useState<Workspace | null>(null)
+  const [access, setAccess] = useState<AccessContext | null>(null)
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-  // Restore a previous session, discarding it if it has expired.
+  const persist = useCallback((next: AccessContext, expiresAt: number) => {
+    const claims: SessionClaims = {
+      memberId: next.member.id,
+      organizationId: next.organization.id,
+      workspaceId: next.workspace?.id ?? null,
+      roleId: next.member.roleId,
+      status: next.member.status,
+      expiresAt,
+    }
+    localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(claims))
+    writeSessionCookie(claims)
+  }, [])
+
+  // Restore a previous session, discarding it if expired or no longer valid.
   useEffect(() => {
     const saved = localStorage.getItem(SESSION_STORAGE_KEY)
     if (!saved) {
@@ -75,17 +108,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const parsed = JSON.parse(saved)
-      const expiresAt = new Date(parsed.session.expiresAt)
+      const claims = JSON.parse(saved) as SessionClaims
+      const resolved =
+        claims.expiresAt > Date.now() ? resolveSession(claims.memberId, claims.workspaceId) : null
 
-      if (Number.isNaN(expiresAt.getTime()) || expiresAt.getTime() <= Date.now()) {
+      // Status is re-read from the source of truth on every restore, so an
+      // administrator's approval or suspension takes effect on next load.
+      if (resolved && STATUS_CAN_AUTHENTICATE[resolved.member.status]) {
+        setAccess(resolved.access)
+        setWorkspaces(resolved.workspaces)
+        persist(resolved.access, claims.expiresAt)
+      } else {
         localStorage.removeItem(SESSION_STORAGE_KEY)
         clearSessionCookie()
-      } else {
-        setSession({ ...parsed.session, expiresAt })
-        setUser(parsed.user)
-        setWorkspace(parsed.workspace)
-        writeSessionCookie(expiresAt)
       }
     } catch {
       localStorage.removeItem(SESSION_STORAGE_KEY)
@@ -93,72 +128,86 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     setIsLoading(false)
-  }, [])
+  }, [persist])
 
-  const login = useCallback(async (email: string, password: string) => {
-    setIsLoading(true)
-    try {
-      // Simulate network latency so the loading state is exercised.
-      await new Promise((resolve) => setTimeout(resolve, 400))
+  const login = useCallback(
+    async (email: string, password: string) => {
+      setIsLoading(true)
+      try {
+        // Simulate network latency so loading states are exercised.
+        await new Promise((resolve) => setTimeout(resolve, 400))
 
-      const account = findDemoAccount(email, password)
-      if (!account) {
-        throw new Error('Invalid email or password')
+        const account = findDemoAccount(email, password)
+        if (!account) throw new Error('Invalid email or password')
+
+        const resolved = resolveSession(account.memberId, null)
+        if (!resolved) throw new Error('Account not found in this organization')
+
+        if (!STATUS_CAN_AUTHENTICATE[resolved.member.status]) {
+          throw new Error(
+            resolved.member.status === 'rejected'
+              ? 'Your access request was declined. Contact your administrator.'
+              : 'This account is no longer active.',
+          )
+        }
+
+        setAccess(resolved.access)
+        setWorkspaces(resolved.workspaces)
+        persist(resolved.access, Date.now() + SESSION_TTL_MS)
+      } finally {
+        setIsLoading(false)
       }
-
-      const nextUser = buildUserFromAccount(account)
-      const expiresAt = new Date(Date.now() + SESSION_TTL_MS)
-      const nextSession: AuthSession = {
-        userId: nextUser.id,
-        workspaceId: 'ws-1',
-        token: `demo-token-${Date.now()}`,
-        expiresAt,
-      }
-      const nextWorkspace = buildWorkspace(nextUser)
-
-      setSession(nextSession)
-      setUser(nextUser)
-      setWorkspace(nextWorkspace)
-
-      localStorage.setItem(
-        SESSION_STORAGE_KEY,
-        JSON.stringify({ session: nextSession, user: nextUser, workspace: nextWorkspace }),
-      )
-      writeSessionCookie(expiresAt)
-    } finally {
-      setIsLoading(false)
-    }
-  }, [])
+    },
+    [persist],
+  )
 
   const logout = useCallback(() => {
-    setSession(null)
-    setUser(null)
-    setWorkspace(null)
+    setAccess(null)
+    setWorkspaces([])
     localStorage.removeItem(SESSION_STORAGE_KEY)
     clearSessionCookie()
   }, [])
 
-  const canAccess = useCallback(
-    (permission: string): boolean => {
-      if (!user) return false
-      return (ROLE_PERMISSIONS[user.role] ?? []).includes(permission)
+  const switchWorkspace = useCallback(
+    (workspaceId: string) => {
+      setAccess((current) => {
+        if (!current) return current
+        const workspace = mockWorkspaces.find((candidate) => candidate.id === workspaceId)
+        if (!workspace || !current.member.workspaceIds.includes(workspaceId)) return current
+
+        const next = buildAccessContext({
+          member: current.member,
+          organization: current.organization,
+          workspace,
+        })
+        persist(next, Date.now() + SESSION_TTL_MS)
+        return next
+      })
     },
-    [user],
+    [persist],
   )
 
-  const value = useMemo<AuthContextType>(
-    () => ({
-      session,
-      user,
-      workspace,
+  const value = useMemo<AuthContextType>(() => {
+    const permissions = access?.permissions ?? []
+    return {
+      access,
+      member: access?.member ?? null,
+      organization: access?.organization ?? null,
+      workspace: access?.workspace ?? null,
+      workspaces,
+      role: access?.role ?? null,
+      permissions,
       isLoading,
+      isAuthenticated: !!access,
+      isGated: !!access && access.status !== 'approved',
+      can: (permission) => can(permissions, permission),
+      canAny: (required) => canAny(permissions, required),
+      canAll: (required) => canAll(permissions, required),
       login,
       logout,
-      isAuthenticated: !!session && !!user,
-      canAccess,
-    }),
-    [session, user, workspace, isLoading, login, logout, canAccess],
-  )
+      switchWorkspace,
+    }
+  }, [access, workspaces, isLoading, login, logout, switchWorkspace])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
@@ -169,4 +218,9 @@ export function useAuth() {
     throw new Error('useAuth must be used within an AuthProvider')
   }
   return context
+}
+
+/** Convenience hook for permission checks in leaf components. */
+export function usePermission(permission: Permission): boolean {
+  return useAuth().can(permission)
 }

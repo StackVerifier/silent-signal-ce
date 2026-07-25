@@ -1,8 +1,9 @@
 import type {
   DashboardMetrics, ServiceHealth, LiveSignal,
   Sprint, Release, QAItem, QATester, Rule, Signal,
-  User, Workspace, WorkspaceMember, Notification, AuditLog, Integration, BillingInfo
+  Notification, AuditLog, Integration, BillingInfo
 } from './types'
+import { mockMembers } from './mock-tenancy'
 
 // ─── Dashboard Metrics ────────────────────────────────────────────────────────
 
@@ -375,75 +376,10 @@ export const riskTimeline: RiskTimelineEvent[] = [
 
 // ─── Users ────────────────────────────────────────────────────────────────────
 
-export const mockUsers: User[] = [
-  {
-    id: 'user-1',
-    email: 'alice@company.com',
-    name: 'Alice Chen',
-    role: 'admin',
-    avatar: 'AC',
-    createdAt: new Date('2025-01-15'),
-    lastLoginAt: new Date(Date.now() - 3600000),
-    preferences: { theme: 'light', emailNotifications: true, desktopNotifications: true, language: 'en' },
-  },
-  {
-    id: 'user-2',
-    email: 'bob@company.com',
-    name: 'Bob Martinez',
-    role: 'manager',
-    avatar: 'BM',
-    createdAt: new Date('2025-02-20'),
-    lastLoginAt: new Date(Date.now() - 7200000),
-    preferences: { theme: 'dark', emailNotifications: true, desktopNotifications: false, language: 'en' },
-  },
-  {
-    id: 'user-3',
-    email: 'charlie@company.com',
-    name: 'Charlie Patel',
-    role: 'lead',
-    avatar: 'CP',
-    createdAt: new Date('2025-03-10'),
-    lastLoginAt: new Date(Date.now() - 86400000),
-    preferences: { theme: 'light', emailNotifications: true, desktopNotifications: true, language: 'en' },
-  },
-  {
-    id: 'user-4',
-    email: 'diana@company.com',
-    name: 'Diana Lopez',
-    role: 'member',
-    avatar: 'DL',
-    createdAt: new Date('2025-04-05'),
-    lastLoginAt: new Date(Date.now() - 172800000),
-    preferences: { theme: 'light', emailNotifications: false, desktopNotifications: true, language: 'en' },
-  },
-]
-
-// ─── Workspace & Members ──────────────────────────────────────────────────────
-
-export const mockWorkspace: Workspace = {
-  id: 'ws-1',
-  name: 'Acme Corp',
-  slug: 'acme-corp',
-  logo: 'AC',
-  description: 'Risk monitoring for product delivery',
-  owner: mockUsers[0],
-  members: mockUsers.map((user, idx) => ({
-    id: `wm-${idx + 1}`,
-    userId: user.id,
-    user,
-    role: user.role,
-    joinedAt: user.createdAt,
-    invitedBy: idx === 0 ? undefined : mockUsers[0],
-  })),
-  createdAt: new Date('2025-01-15'),
-  updatedAt: new Date(Date.now() - 86400000),
-  settings: {
-    isPrivate: false,
-    twoFactorRequired: false,
-    ssoEnabled: true,
-    auditLoggingEnabled: true,
-    dataRetentionDays: 90,
-  },
+// Actors referenced by audit records — projected from the tenancy graph.
+const actor = (id: string) => {
+  const member = mockMembers.find((candidate) => candidate.id === id)!
+  return { id: member.id, name: member.name, email: member.email, avatar: member.avatar }
 }
 
 // ─── Notifications ────────────────────────────────────────────────────────────
@@ -451,7 +387,7 @@ export const mockWorkspace: Workspace = {
 export const mockNotifications: Notification[] = [
   {
     id: 'notif-1',
-    userId: 'user-1',
+    userId: 'mem-1',
     workspaceId: 'ws-1',
     type: 'risk',
     level: 'critical',
@@ -463,7 +399,7 @@ export const mockNotifications: Notification[] = [
   },
   {
     id: 'notif-2',
-    userId: 'user-1',
+    userId: 'mem-1',
     workspaceId: 'ws-1',
     type: 'sprint',
     level: 'high',
@@ -475,7 +411,7 @@ export const mockNotifications: Notification[] = [
   },
   {
     id: 'notif-3',
-    userId: 'user-1',
+    userId: 'mem-1',
     workspaceId: 'ws-1',
     type: 'release',
     level: 'medium',
@@ -492,9 +428,10 @@ export const mockNotifications: Notification[] = [
 export const mockAuditLogs: AuditLog[] = [
   {
     id: 'audit-1',
+    organizationId: 'org-1',
     workspaceId: 'ws-1',
-    userId: 'user-1',
-    user: mockUsers[0],
+    userId: 'mem-1',
+    user: actor('mem-1'),
     action: 'update',
     resource: 'rule',
     resourceId: 'rule-1',
@@ -503,9 +440,10 @@ export const mockAuditLogs: AuditLog[] = [
   },
   {
     id: 'audit-2',
+    organizationId: 'org-1',
     workspaceId: 'ws-1',
-    userId: 'user-2',
-    user: mockUsers[1],
+    userId: 'mem-2',
+    user: actor('mem-2'),
     action: 'invite',
     resource: 'member',
     resourceId: 'wm-4',
@@ -514,9 +452,10 @@ export const mockAuditLogs: AuditLog[] = [
   },
   {
     id: 'audit-3',
+    organizationId: 'org-1',
     workspaceId: 'ws-1',
-    userId: 'user-1',
-    user: mockUsers[0],
+    userId: 'mem-1',
+    user: actor('mem-1'),
     action: 'update',
     resource: 'workspace',
     resourceId: 'ws-1',

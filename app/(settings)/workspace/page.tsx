@@ -1,7 +1,7 @@
 'use client'
 
 import { SettingsPageHeader } from '@/components/settings/page-header'
-import { mockWorkspace } from '@/lib/mock-data'
+import { mockOrganization as mockWorkspace } from '@/lib/mock-tenancy'
 import { motion } from 'framer-motion'
 import { Settings, Shield, Lock } from 'lucide-react'
 
@@ -67,8 +67,8 @@ export default function WorkspacePage() {
               </div>
               <div className="flex items-center justify-between p-3 bg-[#070B18] rounded border border-[#1E2D4A]">
                 <label className="text-sm text-[#E2E8F0]">SSO Enabled</label>
-                <div className={`text-xs font-medium ${mockWorkspace.settings.ssoEnabled ? 'text-[#10B981]' : 'text-[#64748B]'}`}>
-                  {mockWorkspace.settings.ssoEnabled ? 'Active' : 'Inactive'}
+                <div className={`text-xs font-medium ${mockWorkspace.ssoEnabled ? 'text-[#10B981]' : 'text-[#64748B]'}`}>
+                  {mockWorkspace.ssoEnabled ? 'Active' : 'Inactive'}
                 </div>
               </div>
               <div className="flex items-center justify-between p-3 bg-[#070B18] rounded border border-[#1E2D4A]">

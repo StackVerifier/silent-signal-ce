@@ -1,21 +1,10 @@
 'use client'
 
-import { Bell, RefreshCw, Wifi, LogOut } from 'lucide-react'
-import { useRouter } from 'next/navigation'
+import { Bell, RefreshCw, Wifi } from 'lucide-react'
 import { useDashboardStore } from '@/store/dashboard-store'
 import { useAuth } from '@/lib/auth-context'
-import { getRoleLabel } from '@/lib/permissions'
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-
-function initialsOf(name: string) {
-  return name
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('')
-}
 
 function useRelativeTime(date: Date) {
   const [label, setLabel] = useState('')
@@ -35,21 +24,16 @@ function useRelativeTime(date: Date) {
 }
 
 export function Topbar({ title }: { title: string }) {
-  const { metrics, liveSignals, simulateUpdate } = useDashboardStore()
-  const { user, logout } = useAuth()
-  const router = useRouter()
+  const metrics = useDashboardStore((state) => state.metrics)
+  const liveSignals = useDashboardStore((state) => state.liveSignals)
+  const simulateUpdate = useDashboardStore((state) => state.simulateUpdate)
+  const { isGated } = useAuth()
   const syncLabel = useRelativeTime(metrics.lastSyncAt)
   const [syncing, setSyncing] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
-  const [userOpen, setUserOpen] = useState(false)
-
-  const handleLogout = () => {
-    logout()
-    setUserOpen(false)
-    router.replace('/auth/login')
-    router.refresh()
-  }
-  const criticalSignals = liveSignals.filter(s => s.severity === 'critical' || s.severity === 'high')
+  const criticalSignals = isGated
+    ? []
+    : liveSignals.filter(s => s.severity === 'critical' || s.severity === 'high')
 
   const handleSync = () => {
     setSyncing(true)
@@ -70,10 +54,16 @@ export function Topbar({ title }: { title: string }) {
       <div className="flex items-center gap-3">
         <h1 className="text-sm font-semibold text-[#E2E8F0]">{title}</h1>
         <div className="flex items-center gap-1.5">
-          <span className="inline-flex items-center gap-1 text-[10px] text-[#22C55E] bg-[#22C55E]/10 border border-[#22C55E]/20 px-2 py-0.5 rounded-full">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E] pulse-dot inline-block" />
-            Live
-          </span>
+          {isGated ? (
+            <span className="inline-flex items-center gap-1 text-[10px] text-[#F59E0B] bg-[#F59E0B]/10 border border-[#F59E0B]/20 px-2 py-0.5 rounded-full">
+              Locked
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-[10px] text-[#22C55E] bg-[#22C55E]/10 border border-[#22C55E]/20 px-2 py-0.5 rounded-full">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E] pulse-dot inline-block" />
+              Live
+            </span>
+          )}
         </div>
       </div>
 
@@ -144,44 +134,6 @@ export function Topbar({ title }: { title: string }) {
           </AnimatePresence>
         </div>
 
-        {/* User menu */}
-        <div className="relative">
-          <button
-            onClick={() => setUserOpen(!userOpen)}
-            aria-label="Account menu"
-            aria-expanded={userOpen}
-            className="w-7 h-7 rounded-full bg-[#6C63FF]/20 border border-[#6C63FF]/40 flex items-center justify-center text-[10px] font-bold text-[#6C63FF] hover:bg-[#6C63FF]/30 transition-colors"
-          >
-            {user ? initialsOf(user.name) : '—'}
-          </button>
-
-          <AnimatePresence>
-            {userOpen && user && (
-              <motion.div
-                initial={{ opacity: 0, y: 8, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 8, scale: 0.95 }}
-                transition={{ duration: 0.15 }}
-                className="absolute right-0 top-10 w-56 bg-[#111827] border border-[#1E2D4A] rounded-xl shadow-2xl overflow-hidden z-50"
-              >
-                <div className="px-4 py-3 border-b border-[#1E2D4A]">
-                  <p className="text-sm font-semibold text-[#E2E8F0] truncate">{user.name}</p>
-                  <p className="text-xs text-[#64748B] truncate">{user.email}</p>
-                  <span className="mt-2 inline-block text-[10px] font-medium text-[#6C63FF] bg-[#6C63FF]/10 px-2 py-0.5 rounded-full">
-                    {getRoleLabel(user.role)}
-                  </span>
-                </div>
-                <button
-                  onClick={handleLogout}
-                  className="w-full flex items-center gap-2 px-4 py-3 text-sm text-[#94A3B8] hover:bg-[#151D32] hover:text-[#E2E8F0] transition-colors"
-                >
-                  <LogOut aria-hidden="true" className="w-4 h-4" />
-                  Sign out
-                </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
       </div>
     </header>
   )
