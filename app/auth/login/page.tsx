@@ -7,6 +7,8 @@ import { useAuth } from '@/lib/auth-context'
 import { Mail, Lock, ArrowRight } from 'lucide-react'
 import { motion } from 'framer-motion'
 
+export const dynamic = 'force-dynamic'
+
 export default function LoginPage() {
   const router = useRouter()
   const { login, isLoading } = useAuth()
