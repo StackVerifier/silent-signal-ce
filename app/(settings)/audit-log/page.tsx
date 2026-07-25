@@ -1,7 +1,11 @@
 'use client'
 
 import { SettingsPageHeader } from '@/components/settings/page-header'
-import { mockAuditLogs } from '@/lib/mock-data'
+import { useAuditLog } from '@/lib/query/hooks'
+import { useGatedQuery } from '@/hooks/use-gated-data'
+import { PermissionGuard } from '@/components/rbac/permission-guard'
+import { EmptyState, ErrorState } from '@/components/states/data-states'
+import { PERMISSIONS } from '@/lib/rbac/permissions'
 import { motion } from 'framer-motion'
 import { FileText, User, Database } from 'lucide-react'
 
@@ -15,7 +19,11 @@ const ACTION_LABELS: Record<string, string> = {
 }
 
 export default function AuditLogPage() {
+  const result = useGatedQuery(useAuditLog({ limit: 100 }), { permission: PERMISSIONS.AUDIT_READ })
+  const entries = result.data?.data ?? []
+
   return (
+    <PermissionGuard permission={PERMISSIONS.AUDIT_READ} showDenied>
     <div className="flex-1 flex flex-col overflow-hidden">
       <SettingsPageHeader
         title="Audit Log"
@@ -25,7 +33,7 @@ export default function AuditLogPage() {
       <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6">
         <div className="max-w-4xl">
           <div className="space-y-2">
-            {mockAuditLogs.map((log, idx) => (
+            {entries.map((log, idx) => (
               <motion.div
                 key={log.id}
                 initial={{ opacity: 0, y: 10 }}
@@ -60,8 +68,31 @@ export default function AuditLogPage() {
               </motion.div>
             ))}
           </div>
+
+            {result.isSkeleton && (
+              <div className="space-y-2">
+                {Array.from({ length: 5 }).map((_, index) => (
+                  <div key={index} className="h-24 rounded-lg bg-[#0F1824] border border-[#1E2D4A] animate-pulse" />
+                ))}
+              </div>
+            )}
+            {result.state === 'error' && (
+              <ErrorState
+                title="Unable to load the audit log"
+                description={result.errorMessage ?? undefined}
+                onRetry={result.retry}
+              />
+            )}
+            {result.state === 'ready' && entries.length === 0 && (
+              <EmptyState
+                icon={FileText}
+                title="No activity recorded yet"
+                description="Member approvals, rule changes and integration updates all appear here."
+              />
+            )}
         </div>
       </div>
     </div>
+    </PermissionGuard>
   )
 }

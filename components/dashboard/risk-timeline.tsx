@@ -7,9 +7,8 @@ import {
   GitBranch, Zap, Info, Calendar
 } from 'lucide-react'
 import { SectionCard } from './shared'
-import { riskTimeline, signals } from '@/lib/mock-data'
-import type { RiskTimelineEvent } from '@/lib/mock-data'
-import type { Severity } from '@/lib/types'
+import { useRiskTimeline, useSignals } from '@/lib/query/hooks'
+import type { RiskTimelineEvent, Severity } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 function EventIcon({ type }: { type: RiskTimelineEvent['type'] }) {
@@ -45,6 +44,7 @@ function EventDot({ type, severity }: { type: RiskTimelineEvent['type']; severit
 }
 
 function RiskScoreChart() {
+  const riskTimeline = useRiskTimeline().data ?? []
   // Build timeline risk trend from events (running sum)
   const events = [...riskTimeline].reverse()
   let score = 65
@@ -194,6 +194,7 @@ function TimelineItem({ event, index }: { event: RiskTimelineEvent; index: numbe
 }
 
 function ActiveSignals() {
+  const signals = useSignals().data ?? []
   return (
     <SectionCard title="Active Signals" subtitle={`${signals.length} signals from rule engine`}>
       <div className="divide-y divide-[#1E2D4A]/50">
@@ -241,6 +242,7 @@ function ActiveSignals() {
 }
 
 export function RiskTimeline() {
+  const riskTimeline = useRiskTimeline().data ?? []
   const [filter, setFilter] = useState<string>('all')
   const types = ['all', 'risk-increase', 'alert', 'resolved', 'release']
 

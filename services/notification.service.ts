@@ -1,73 +1,68 @@
-import { mockDb } from '@/lib/mock-db'
+import { request } from './http'
 import type { Notification, NotificationLevel } from '@/lib/types'
-import { resolve, resolveMutation } from './transport'
 
 export type NotificationChannel = 'slack' | 'teams' | 'email'
 
-export interface ChannelRoute {
-  channel: NotificationChannel
-  /** Slack channel id, Teams webhook id, or an email group. */
-  target: string
-  minimumLevel: NotificationLevel
-  enabled: boolean
-  /** Local time window during which delivery is suppressed. */
-  quietHours?: { start: string; end: string; timezone: string }
+export interface QuietHours {
+  start: string
+  end: string
+  timezone: string
 }
 
 /**
- * Outbound notifications.
- *
- * Delivery always happens server-side: Slack and Teams webhook URLs are
- * credentials and must never reach the browser. The client only reads and edits
- * routing rules.
+ * A webhook destination as the browser is allowed to see it: `urlHint` is a
+ * masked preview, never the URL itself. The real URL only exists server-side.
  */
+export interface WebhookEndpoint {
+  id: string
+  workspaceId: string
+  channel: NotificationChannel
+  label: string
+  urlHint: string
+  minimumLevel: NotificationLevel
+  enabled: boolean
+  quietHours: QuietHours | null
+  lastStatus: 'ok' | 'failed' | 'untested' | null
+  lastError: string | null
+  lastTestedAt: string | null
+}
+
+export interface WebhookInput {
+  channel: NotificationChannel
+  label: string
+  url: string
+  minimumLevel: NotificationLevel
+  enabled: boolean
+  quietHours: QuietHours | null
+}
+
 export const notificationService = {
   list: (signal?: AbortSignal) =>
-    resolve<Notification[]>({ path: '/api/notifications', signal, mock: () => mockDb.notifications() }),
+    request<Notification[]>('/api/notifications', { signal }),
 
   markRead: (notificationId: string) =>
-    resolveMutation<{ ok: true }>({
-      path: `/api/notifications/${notificationId}/read`,
-      mock: () => mockDb.markNotificationRead(notificationId),
-    }),
+    request<{ ok: true }>(`/api/notifications/${notificationId}`, { method: 'POST' }),
 
   markAllRead: () =>
-    resolveMutation<{ ok: true }>({
-      path: '/api/notifications/read-all',
-      mock: () => mockDb.markAllNotificationsRead(),
+    request<{ ok: true }>('/api/notifications', { method: 'POST' }),
+
+  listWebhooks: (workspaceId?: string, signal?: AbortSignal) =>
+    request<WebhookEndpoint[]>('/api/webhooks', { workspaceId, signal }),
+
+  createWebhook: (input: WebhookInput, workspaceId?: string) =>
+    request<WebhookEndpoint>('/api/webhooks', { method: 'POST', body: input, workspaceId }),
+
+  updateWebhook: (webhookId: string, patch: Partial<WebhookInput>, workspaceId?: string) =>
+    request<WebhookEndpoint>(`/api/webhooks/${webhookId}`, {
+      method: 'PATCH', body: patch, workspaceId,
     }),
 
-  listRoutes: (workspaceId?: string, signal?: AbortSignal) =>
-    resolve<ChannelRoute[]>({
-      path: '/api/notifications/routes',
-      workspaceId,
-      signal,
-      mock: () => [
-        { channel: 'slack', target: '#release-risk', minimumLevel: 'high', enabled: true },
-        { channel: 'teams', target: 'Delivery / Alerts', minimumLevel: 'critical', enabled: true },
-        {
-          channel: 'email', target: 'release-managers@boyner.com.tr',
-          minimumLevel: 'critical', enabled: false,
-          quietHours: { start: '19:00', end: '08:00', timezone: 'Europe/Istanbul' },
-        },
-      ],
-    }),
+  deleteWebhook: (webhookId: string, workspaceId?: string) =>
+    request<{ ok: true }>(`/api/webhooks/${webhookId}`, { method: 'DELETE', workspaceId }),
 
-  saveRoute: (route: ChannelRoute, workspaceId?: string) =>
-    resolveMutation<ChannelRoute>({
-      path: '/api/notifications/routes',
-      method: 'PUT',
-      body: route,
-      workspaceId,
-      mock: () => route,
-    }),
-
-  /** Sends a sample payload so an admin can verify wiring before going live. */
-  sendTest: (channel: NotificationChannel, workspaceId?: string) =>
-    resolveMutation<{ ok: true }>({
-      path: '/api/notifications/test',
-      body: { channel },
-      workspaceId,
-      mock: () => ({ ok: true }),
+  /** Posts a real message to the destination. */
+  testWebhook: (webhookId: string, workspaceId?: string) =>
+    request<{ ok: boolean; error: string | null }>(`/api/webhooks/${webhookId}`, {
+      method: 'POST', workspaceId,
     }),
 }

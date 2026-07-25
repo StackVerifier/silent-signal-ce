@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { CheckCircle, AlertTriangle, XCircle, Lock, ChevronDown, ChevronRight, Calendar, Users } from 'lucide-react'
 import { SectionCard, ScoreBar, PriorityBadge, GateStatusBadge, RiskLevelBadge } from './shared'
-import { releases } from '@/lib/mock-data'
+import { useReleases } from '@/lib/query/hooks'
 import type { Release, GateStatus } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -244,6 +244,7 @@ function ServiceCoverage({ release }: { release: Release }) {
 }
 
 export function ReleaseControl() {
+  const releases = useReleases().data ?? []
   const [selectedRelease, setSelectedRelease] = useState(releases[0].id)
   const release = releases.find(r => r.id === selectedRelease) || releases[0]
 

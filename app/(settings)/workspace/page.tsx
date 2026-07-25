@@ -1,11 +1,13 @@
 'use client'
 
 import { SettingsPageHeader } from '@/components/settings/page-header'
-import { mockOrganization as mockWorkspace } from '@/lib/mock-tenancy'
+import { useAuth } from '@/lib/auth-context'
 import { motion } from 'framer-motion'
 import { Settings, Shield, Lock } from 'lucide-react'
 
 export default function WorkspacePage() {
+  const { organization } = useAuth()
+  if (!organization) return null
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       <SettingsPageHeader
@@ -29,19 +31,19 @@ export default function WorkspacePage() {
               <div>
                 <label className="text-sm text-[#64748B]">Workspace Name</label>
                 <div className="mt-1 p-3 bg-[#070B18] rounded border border-[#1E2D4A] text-[#E2E8F0]">
-                  {mockWorkspace.name}
+                  {organization.name}
                 </div>
               </div>
               <div>
                 <label className="text-sm text-[#64748B]">Slug</label>
                 <div className="mt-1 p-3 bg-[#070B18] rounded border border-[#1E2D4A] text-[#E2E8F0] font-mono text-sm">
-                  {mockWorkspace.slug}
+                  {organization.slug}
                 </div>
               </div>
               <div>
                 <label className="text-sm text-[#64748B]">Created</label>
                 <div className="mt-1 p-3 bg-[#070B18] rounded border border-[#1E2D4A] text-[#E2E8F0]">
-                  {new Date(mockWorkspace.createdAt).toLocaleDateString()}
+                  {new Date(organization.createdAt).toLocaleDateString()}
                 </div>
               </div>
             </div>
@@ -61,20 +63,20 @@ export default function WorkspacePage() {
             <div className="space-y-3">
               <div className="flex items-center justify-between p-3 bg-[#070B18] rounded border border-[#1E2D4A]">
                 <label className="text-sm text-[#E2E8F0]">Two-Factor Authentication</label>
-                <div className={`text-xs font-medium ${mockWorkspace.settings.twoFactorRequired ? 'text-[#10B981]' : 'text-[#64748B]'}`}>
-                  {mockWorkspace.settings.twoFactorRequired ? 'Required' : 'Optional'}
+                <div className={`text-xs font-medium ${organization.settings.twoFactorRequired ? 'text-[#10B981]' : 'text-[#64748B]'}`}>
+                  {organization.settings.twoFactorRequired ? 'Required' : 'Optional'}
                 </div>
               </div>
               <div className="flex items-center justify-between p-3 bg-[#070B18] rounded border border-[#1E2D4A]">
                 <label className="text-sm text-[#E2E8F0]">SSO Enabled</label>
-                <div className={`text-xs font-medium ${mockWorkspace.ssoEnabled ? 'text-[#10B981]' : 'text-[#64748B]'}`}>
-                  {mockWorkspace.ssoEnabled ? 'Active' : 'Inactive'}
+                <div className={`text-xs font-medium ${organization.ssoEnabled ? 'text-[#10B981]' : 'text-[#64748B]'}`}>
+                  {organization.ssoEnabled ? 'Active' : 'Inactive'}
                 </div>
               </div>
               <div className="flex items-center justify-between p-3 bg-[#070B18] rounded border border-[#1E2D4A]">
                 <label className="text-sm text-[#E2E8F0]">Audit Logging</label>
-                <div className={`text-xs font-medium ${mockWorkspace.settings.auditLoggingEnabled ? 'text-[#10B981]' : 'text-[#64748B]'}`}>
-                  {mockWorkspace.settings.auditLoggingEnabled ? 'Enabled' : 'Disabled'}
+                <div className={`text-xs font-medium ${organization.settings.auditLoggingEnabled ? 'text-[#10B981]' : 'text-[#64748B]'}`}>
+                  {organization.settings.auditLoggingEnabled ? 'Enabled' : 'Disabled'}
                 </div>
               </div>
             </div>
@@ -92,7 +94,7 @@ export default function WorkspacePage() {
               Data Retention
             </h2>
             <p className="text-sm text-[#64748B] mb-3">
-              Workspace data is retained for <strong className="text-[#E2E8F0]">{mockWorkspace.settings.dataRetentionDays} days</strong> after deletion.
+              Workspace data is retained for <strong className="text-[#E2E8F0]">{organization.settings.dataRetentionDays} days</strong> after deletion.
             </p>
           </motion.div>
         </div>

@@ -2,14 +2,19 @@
 
 import { RefreshCw, Wifi, Menu } from 'lucide-react'
 import { useDashboardStore } from '@/store/dashboard-store'
+import { useDashboardSnapshot } from '@/lib/query/hooks'
 import { useAuth } from '@/lib/auth-context'
 import { useEffect, useState } from 'react'
 import { Breadcrumb } from './breadcrumb'
 import { NotificationCenter } from '@/components/notifications/notification-center'
 
-function useRelativeTime(date: Date) {
+function useRelativeTime(date: Date | null | undefined) {
   const [label, setLabel] = useState('')
   useEffect(() => {
+    if (!date) {
+      setLabel('never')
+      return
+    }
     const update = () => {
       const diff = Math.floor((Date.now() - date.getTime()) / 1000)
       if (diff < 5)   setLabel('just now')
@@ -25,26 +30,23 @@ function useRelativeTime(date: Date) {
 }
 
 export function Topbar({ title, trailing }: { title: string; trailing?: string }) {
-  const metrics = useDashboardStore((state) => state.metrics)
-  const simulateUpdate = useDashboardStore((state) => state.simulateUpdate)
   const { isGated } = useAuth()
-  const syncLabel = useRelativeTime(metrics.lastSyncAt)
+  const snapshot = useDashboardSnapshot()
+  const lastSync = snapshot.data?.metrics?.lastSyncAt
+  const syncLabel = useRelativeTime(lastSync ? new Date(lastSync) : null)
   const [syncing, setSyncing] = useState(false)
   const setMobileNavOpen = useDashboardStore((state) => state.setMobileNavOpen)
 
-  const handleSync = () => {
+  // Refetching is the honest action here: the button pulls fresh data rather
+  // than nudging a local counter.
+  const handleSync = async () => {
     setSyncing(true)
-    setTimeout(() => {
-      simulateUpdate()
+    try {
+      await snapshot.refetch()
+    } finally {
       setSyncing(false)
-    }, 800)
+    }
   }
-
-  // BLE-style: poll every 30s
-  useEffect(() => {
-    const interval = setInterval(simulateUpdate, 30000)
-    return () => clearInterval(interval)
-  }, [simulateUpdate])
 
 
   return (

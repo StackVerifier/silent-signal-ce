@@ -86,7 +86,11 @@ export const JOBS: JobDefinition[] = [
     intervalSeconds: HOUR,
     timeoutMs: 15_000,
     maxAttempts: 1,
-    handler: async () => ({ summary: 'Expired invitations past their window' }),
+    handler: async () => {
+      const { invitationRepo } = await import('@/lib/db/repositories')
+      const expired = invitationRepo.expireOverdue()
+      return { summary: `Expired ${expired} invitation(s)`, metrics: { expired } }
+    },
   },
   {
     id: 'audit.retention',

@@ -9,7 +9,7 @@ import {
   ArrowRight
 } from 'lucide-react'
 import { SectionCard, ScoreBar } from './shared'
-import { rules } from '@/lib/mock-data'
+import { useRules } from '@/lib/query/hooks'
 import { useToggleRule } from '@/lib/query/hooks'
 import { useToast } from '@/components/ui/toast'
 import { useAuth } from '@/lib/auth-context'
@@ -130,6 +130,7 @@ function CategoryBreakdown({ allRules }: { allRules: Rule[] }) {
 // ─── Rule Card ────────────────────────────────────────────────────────────────
 
 function RuleCard({ rule, index }: { rule: Rule; index: number }) {
+  const rules = useRules().data ?? []
   const [expanded, setExpanded] = useState(false)
   const [enabled, setEnabled] = useState(rule.enabled)
   const toggleRule = useToggleRule()
@@ -284,6 +285,7 @@ function RuleCard({ rule, index }: { rule: Rule; index: number }) {
 // ─── Rule List ────────────────────────────────────────────────────────────────
 
 function RuleList({ allRules }: { allRules: Rule[] }) {
+  const rules = useRules().data ?? []
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -432,6 +434,7 @@ function TriggerHistory({ allRules }: { allRules: Rule[] }) {
 // ─── Score Impact Breakdown ───────────────────────────────────────────────────
 
 function ScoreImpactChart({ allRules }: { allRules: Rule[] }) {
+  const rules = useRules().data ?? []
   const sorted = [...allRules]
     .filter(r => r.enabled)
     .sort((a, b) => b.scoreImpact - a.scoreImpact)
@@ -470,6 +473,7 @@ function ScoreImpactChart({ allRules }: { allRules: Rule[] }) {
 // ─── Main Export ──────────────────────────────────────────────────────────────
 
 export function RuleManagement() {
+  const rules = useRules().data ?? []
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-[1600px] mx-auto">
       {/* Header */}

@@ -4,13 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "predev": "node --experimental-strip-types scripts/seed-help.mjs",
+    "predev": "node --experimental-strip-types scripts/seed-help.mjs && node --experimental-strip-types scripts/seed-app.mjs",
     "build": "next build",
-    "prebuild": "node --experimental-strip-types scripts/seed-help.mjs",
+    "prebuild": "node --experimental-strip-types scripts/seed-help.mjs && node --experimental-strip-types scripts/seed-app.mjs",
     "start": "next start",
-    "db:seed": "node --experimental-strip-types scripts/seed-help.mjs",
+    "db:seed": "node --experimental-strip-types scripts/seed-help.mjs && node --experimental-strip-types scripts/seed-app.mjs",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "db:reset": "node --experimental-strip-types scripts/seed-help.mjs && node --experimental-strip-types scripts/seed-app.mjs --force"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

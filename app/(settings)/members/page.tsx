@@ -9,13 +9,13 @@ import { InvitationStatusBadge, relativeTime } from '@/components/members/member
 import { PermissionGuard } from '@/components/rbac/permission-guard'
 import { EmptyState, ErrorState } from '@/components/states/data-states'
 import { useGatedQuery } from '@/hooks/use-gated-data'
-import { useInvitationAction, useInvitations, useMembers } from '@/lib/query/hooks'
+import { useInvitationAction, useInvitations, useMembers, useWorkspaces } from '@/lib/query/hooks'
 import { InviteMemberDialog } from '@/components/members/invite-member-dialog'
 import { useToast } from '@/components/ui/toast'
 import { useAuth } from '@/lib/auth-context'
 import { PERMISSIONS } from '@/lib/rbac/permissions'
 import { getRoleLabel } from '@/lib/rbac/roles'
-import { mockWorkspaces } from '@/lib/mock-tenancy'
+
 import type { Invitation } from '@/lib/rbac/types'
 
 type Tab = 'members' | 'invitations'
@@ -121,6 +121,7 @@ function InvitationList({
   onInvite: () => void
 }) {
   const { can } = useAuth()
+  const workspaces = useWorkspaces().data ?? []
   const invitationAction = useInvitationAction()
   const toast = useToast()
 
@@ -180,7 +181,7 @@ function InvitationList({
             <p className="text-sm font-medium text-[#E2E8F0] truncate">{invitation.email}</p>
             <p className="text-[11px] text-[#64748B] truncate">
               {getRoleLabel(invitation.roleId)} ·{' '}
-              {mockWorkspaces.find((workspace) => workspace.id === invitation.workspaceId)?.name}
+              {workspaces.find((workspace) => workspace.id === invitation.workspaceId)?.name}
             </p>
           </div>
 

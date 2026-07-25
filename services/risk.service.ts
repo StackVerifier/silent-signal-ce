@@ -1,16 +1,17 @@
-import { riskTimeline, type RiskTimelineEvent } from '@/lib/mock-data'
-import { resolve } from './transport'
+import { request } from './http'
+import type { RiskTimelineEvent, Signal } from '@/lib/types'
 
 export const riskService = {
   listTimeline: (
     params: { from?: string; to?: string; workspaceId?: string } = {},
     signal?: AbortSignal,
   ) =>
-    resolve<RiskTimelineEvent[]>({
-      path: '/api/risk/timeline',
+    request<RiskTimelineEvent[]>('/api/risk', {
       query: { from: params.from, to: params.to },
       workspaceId: params.workspaceId,
       signal,
-      mock: () => riskTimeline,
     }),
+
+  listSignals: (workspaceId?: string, signal?: AbortSignal) =>
+    request<Signal[]>('/api/signals', { workspaceId, signal }),
 }

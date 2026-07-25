@@ -1,42 +1,28 @@
-import { mockDb } from '@/lib/mock-db'
+import { request } from './http'
 import type { Integration } from '@/lib/types'
-import { resolve, resolveMutation } from './transport'
 
 /**
  * Jira Cloud integration.
  *
- * Every call in this module is proxied through our own API — the browser never
- * holds a Jira token. The OAuth 2.0 (3LO) exchange, the refresh cycle and the
- * webhook receiver all live in route handlers reading `serverEnv()`.
+ * Every call is proxied through our own API — the browser never holds a Jira
+ * token. The OAuth exchange, refresh cycle and webhook receiver live in route
+ * handlers reading `serverEnv()`.
  */
 
-export interface JiraProject {
-  id: string
-  key: string
-  name: string
-}
-
-export interface JiraBoard {
-  id: string
-  name: string
-  projectKey: string
-  type: 'scrum' | 'kanban'
-}
-
+export interface JiraProject { id: string; key: string; name: string }
+export interface JiraBoard { id: string; name: string; projectKey: string; type: 'scrum' | 'kanban' }
 export type SyncState = 'idle' | 'syncing' | 'error' | 'never'
 
 export interface JiraSyncStatus {
   state: SyncState
-  lastSyncAt: Date | null
-  nextSyncAt: Date | null
-  /** Populated when state === 'error'. */
+  lastSyncAt: string | null
+  nextSyncAt: string | null
   lastError?: string
-  /** Jira applies per-tenant rate limits; surfaced so the UI can explain waits. */
-  rateLimitedUntil?: Date | null
+  rateLimitedUntil?: string | null
   syncedIssueCount: number
 }
 
-/** Field mapping is customer-specific; Jira custom fields vary per tenant. */
+/** Custom field ids differ per Jira site, so they are mapped per workspace. */
 export interface JiraFieldMapping {
   storyPoints: string | null
   sprint: string | null
@@ -44,116 +30,34 @@ export interface JiraFieldMapping {
   qaStatus: string | null
 }
 
-const jiraIntegration = () => mockDb.integrations().find((integration) => integration.type === 'jira')
-
 export const jiraService = {
-  /** Current connection record, or null when Jira has never been connected. */
   getConnection: (workspaceId?: string, signal?: AbortSignal) =>
-    resolve<Integration | null>({
-      path: '/api/integrations/jira',
-      workspaceId,
-      signal,
-      mock: () => jiraIntegration() ?? null,
-    }),
-
-  /** Returns the URL to redirect to for the OAuth consent screen. */
-  startOAuth: (workspaceId?: string, actorId = 'mem-1') =>
-    resolveMutation<{ redirectUrl: string }>({
-      path: '/api/integrations/jira/oauth/start',
-      workspaceId,
-      mock: () => {
-        // Mock mode short-circuits the consent screen and marks it connected.
-        mockDb.setIntegrationEnabled('jira', true, actorId)
-        return { redirectUrl: '' }
-      },
-    }),
-
-  disconnect: (workspaceId?: string, actorId = 'mem-1') =>
-    resolveMutation<{ ok: true }>({
-      path: '/api/integrations/jira/disconnect',
-      method: 'DELETE',
-      workspaceId,
-      mock: () => {
-        mockDb.setIntegrationEnabled('jira', false, actorId)
-        return { ok: true }
-      },
-    }),
-
-  listProjects: (workspaceId?: string, signal?: AbortSignal) =>
-    resolve<JiraProject[]>({
-      path: '/api/integrations/jira/projects',
-      workspaceId,
-      signal,
-      mock: () => [
-        { id: '10001', key: 'PLAT', name: 'Platform' },
-        { id: '10002', key: 'SHOP', name: 'Storefront' },
-        { id: '10003', key: 'MOB', name: 'Mobile' },
-      ],
-    }),
-
-  listBoards: (projectKey?: string, workspaceId?: string, signal?: AbortSignal) =>
-    resolve<JiraBoard[]>({
-      path: '/api/integrations/jira/boards',
-      query: { projectKey },
-      workspaceId,
-      signal,
-      mock: () => [
-        { id: '1', name: 'Platform Scrum', projectKey: 'PLAT', type: 'scrum' },
-        { id: '2', name: 'Storefront Scrum', projectKey: 'SHOP', type: 'scrum' },
-        { id: '3', name: 'Mobile Kanban', projectKey: 'MOB', type: 'kanban' },
-      ],
-    }),
+    request<Integration | null>('/api/integrations/jira', { workspaceId, signal }),
 
   getSyncStatus: (workspaceId?: string, signal?: AbortSignal) =>
-    resolve<JiraSyncStatus>({
-      path: '/api/integrations/jira/sync',
-      workspaceId,
-      signal,
-      mock: () => ({
-        state: jiraIntegration()?.enabled ? 'idle' : 'never',
-        lastSyncAt: jiraIntegration()?.lastSyncAt ?? null,
-        nextSyncAt: new Date(Date.now() + 5 * 60 * 1000),
-        rateLimitedUntil: null,
-        syncedIssueCount: 1284,
-      }),
+    request<JiraSyncStatus>('/api/integrations/jira/sync', { workspaceId, signal }),
+
+  connect: (workspaceId?: string) =>
+    request<{ redirectUrl: string }>('/api/integrations/jira', {
+      method: 'POST', body: { action: 'connect' }, workspaceId,
     }),
 
-  /** Kicks off an incremental sync; the response is the queued job state. */
-  triggerSync: (workspaceId?: string) =>
-    resolveMutation<JiraSyncStatus>({
-      path: '/api/integrations/jira/sync',
-      workspaceId,
-      mock: () => {
-        mockDb.recordSync('jira', 1284)
-        return ({
-          state: 'syncing' as const,
-          lastSyncAt: new Date(),
-          nextSyncAt: new Date(Date.now() + 5 * 60 * 1000),
-          rateLimitedUntil: null,
-          syncedIssueCount: 1284,
-        })
-      },
+  disconnect: (workspaceId?: string) =>
+    request<{ ok: true }>('/api/integrations/jira', {
+      method: 'POST', body: { action: 'disconnect' }, workspaceId,
     }),
+
+  triggerSync: (workspaceId?: string) =>
+    request<JiraSyncStatus>('/api/integrations/jira/sync', { method: 'POST', workspaceId }),
+
+  listProjects: (workspaceId?: string, signal?: AbortSignal) =>
+    request<JiraProject[]>('/api/integrations/jira/projects', { workspaceId, signal }),
 
   getFieldMapping: (workspaceId?: string, signal?: AbortSignal) =>
-    resolve<JiraFieldMapping>({
-      path: '/api/integrations/jira/fields',
-      workspaceId,
-      signal,
-      mock: () => ({
-        storyPoints: 'customfield_10016',
-        sprint: 'customfield_10020',
-        severity: 'customfield_10101',
-        qaStatus: null,
-      }),
-    }),
+    request<JiraFieldMapping>('/api/integrations/jira/fields', { workspaceId, signal }),
 
   saveFieldMapping: (mapping: JiraFieldMapping, workspaceId?: string) =>
-    resolveMutation<JiraFieldMapping>({
-      path: '/api/integrations/jira/fields',
-      method: 'PUT',
-      body: mapping,
-      workspaceId,
-      mock: () => mapping,
+    request<JiraFieldMapping>('/api/integrations/jira/fields', {
+      method: 'PUT', body: mapping, workspaceId,
     }),
 }

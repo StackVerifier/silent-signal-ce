@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Clock, AlertTriangle, RefreshCw, User } from 'lucide-react'
 import { SectionCard, ScoreBar, PriorityBadge } from './shared'
-import { qaQueue, qaTesters } from '@/lib/mock-data'
+import { useQaQueue, useQaTesters } from '@/lib/query/hooks'
 import type { QAItem } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -16,6 +16,7 @@ const STATUS_COLORS: Record<QAItem['status'], string> = {
 }
 
 function QAMetrics() {
+  const qaQueue = useQaQueue().data ?? []
   const waitingCount = qaQueue.filter(i => i.status === 'Waiting').length
   const inProgressCount = qaQueue.filter(i => i.status === 'In Progress').length
   const regressionCount = qaQueue.filter(i => i.status === 'Regression').length
@@ -48,6 +49,7 @@ function QAMetrics() {
 }
 
 function TesterCapacity() {
+  const qaTesters = useQaTesters().data ?? []
   return (
     <SectionCard title="Tester Capacity" subtitle="Current workload by tester">
       <div className="p-4 space-y-4">
@@ -88,6 +90,7 @@ function TesterCapacity() {
 }
 
 function WaitTimeChart() {
+  const qaQueue = useQaQueue().data ?? []
   const maxWait = Math.max(...qaQueue.map(i => i.waitingDays))
   return (
     <SectionCard title="Wait Time Distribution" subtitle="Days waiting per issue">
@@ -123,6 +126,7 @@ function WaitTimeChart() {
 }
 
 function QAQueueTable() {
+  const qaQueue = useQaQueue().data ?? []
   const [filter, setFilter] = useState<string>('all')
   const [sortBy, setSortBy] = useState<'risk' | 'wait' | 'priority'>('risk')
 

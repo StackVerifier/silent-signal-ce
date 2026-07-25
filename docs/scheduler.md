@@ -32,12 +32,42 @@ One definition, two drivers. Swapping drivers changes no job code.
 
 ## Deployment
 
-**Vercel (current).** `vercel.json` registers a one-minute cron against
-`/api/cron`. Vercel sends `Authorization: Bearer $CRON_SECRET`. The endpoint
-runs only the jobs that are due, so the minute-by-minute call is cheap:
+**Vercel (current).** `vercel.json` registers a daily cron against `/api/cron`.
+Vercel sends `Authorization: Bearer $CRON_SECRET`.
 
 ```json
-{ "crons": [{ "path": "/api/cron", "schedule": "* * * * *" }] }
+{ "crons": [{ "path": "/api/cron", "schedule": "0 3 * * *" }] }
+```
+
+Daily is not a design choice — **Vercel Hobby accounts reject any cron that
+fires more than once a day**, and the whole deployment fails to build if you
+try. A one-minute schedule was the original setting and it broke deploys with:
+
+> Hobby accounts are limited to daily cron jobs.
+
+So on Hobby the jobs only get one chance a day, whatever their own
+`intervalSeconds` says. Three ways to get a real cadence:
+
+| Option | Cadence | Notes |
+|---|---|---|
+| Vercel Pro | Any | Change the schedule back to `*/5 * * * *` or finer |
+| External scheduler | Any | Anything that can send a bearer header — GitHub Actions, cron-job.org, an existing box. The endpoint is idempotent, so over-calling is safe |
+| Long-lived host | Any | `SCHEDULER_IN_PROCESS=true`; no external scheduler at all |
+
+The external-scheduler route is the cheapest fix and needs no code change:
+
+```yaml
+# .github/workflows/cron.yml
+on:
+  schedule: [{ cron: '*/10 * * * *' }]
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -fsS -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron"
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ vars.APP_URL }}
 ```
 
 **Long-lived server** (`next start`, Docker, a VM). Set

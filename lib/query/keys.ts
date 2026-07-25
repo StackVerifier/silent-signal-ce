@@ -39,7 +39,7 @@ export const queryKeys = {
   workspaces: () => ['workspaces'] as const,
 
   notifications: () => ['notifications'] as const,
-  notificationRoutes: (workspaceId?: string) => ['notifications', workspaceId, 'routes'] as const,
+  webhooks: (workspaceId?: string) => ['webhooks', workspaceId] as const,
 
   audit: (params?: AuditQuery) => ['audit', params ?? {}] as const,
 } as const
@@ -52,4 +52,5 @@ export const queryScopes = {
   allTeams: ['teams'] as const,
   allAudit: ['audit'] as const,
   allNotifications: ['notifications'] as const,
+  allWebhooks: ['webhooks'] as const,
 }

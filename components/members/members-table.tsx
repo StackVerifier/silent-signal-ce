@@ -6,12 +6,12 @@ import {
   Check, X, Ban, RotateCw, Trash2, UserPlus, ShieldCheck,
 } from 'lucide-react'
 import { useAuth } from '@/lib/auth-context'
-import { useBulkMemberAction, useMemberAction } from '@/lib/query/hooks'
+import { useBulkMemberAction, useMemberAction, useTeams, useWorkspaces } from '@/lib/query/hooks'
 import { useToast } from '@/components/ui/toast'
 import { PERMISSIONS } from '@/lib/rbac/permissions'
 import { canManageRole, getRoleLabel, SYSTEM_ROLE_LIST } from '@/lib/rbac/roles'
 import type { AccountStatus, Member } from '@/lib/rbac/types'
-import { mockTeams, mockWorkspaces } from '@/lib/mock-tenancy'
+
 import { EmptyState } from '@/components/states/data-states'
 import { SkeletonTable } from '@/components/ui/skeleton'
 import { MemberStatusBadge, relativeTime } from './member-status-badge'
@@ -63,6 +63,8 @@ export function MembersTable({
   onInvite?: () => void
 }) {
   const { can, role: actorRole } = useAuth()
+  const workspaces = useWorkspaces().data ?? []
+  const teams = useTeams().data ?? []
   const memberAction = useMemberAction()
   const bulkAction = useBulkMemberAction()
   const toast = useToast()
@@ -206,10 +208,10 @@ export function MembersTable({
             options={[{ value: 'all', label: 'All roles' }, ...SYSTEM_ROLE_LIST.map((role) => ({ value: role.id, label: role.name }))]} />
 
           <Select label="Workspace" value={workspaceFilter} onChange={(value) => { setWorkspaceFilter(value); setPage(0) }}
-            options={[{ value: 'all', label: 'All workspaces' }, ...mockWorkspaces.map((workspace) => ({ value: workspace.id, label: workspace.name }))]} />
+            options={[{ value: 'all', label: 'All workspaces' }, ...workspaces.map((workspace) => ({ value: workspace.id, label: workspace.name }))]} />
 
           <Select label="Team" value={teamFilter} onChange={(value) => { setTeamFilter(value); setPage(0) }}
-            options={[{ value: 'all', label: 'All teams' }, ...mockTeams.map((team) => ({ value: team.id, label: `${team.name}` }))]} />
+            options={[{ value: 'all', label: 'All teams' }, ...teams.map((team) => ({ value: team.id, label: `${team.name}` }))]} />
         </div>
 
         {/* Bulk action bar */}
@@ -298,10 +300,10 @@ export function MembersTable({
                     </td>
                     <td className="px-4 py-3">
                       <p className="text-[11px] text-[#94A3B8] truncate max-w-[180px]">
-                        {member.workspaceIds.map((id) => mockWorkspaces.find((w) => w.id === id)?.name).filter(Boolean).join(', ') || '—'}
+                        {member.workspaceIds.map((id) => workspaces.find((w) => w.id === id)?.name).filter(Boolean).join(', ') || '—'}
                       </p>
                       <p className="text-[11px] text-[#64748B] truncate max-w-[180px]">
-                        {member.teamIds.map((id) => mockTeams.find((t) => t.id === id)?.name).filter(Boolean).join(', ') || 'No team'}
+                        {member.teamIds.map((id) => teams.find((t) => t.id === id)?.name).filter(Boolean).join(', ') || 'No team'}
                       </p>
                     </td>
                     <td className="px-4 py-3"><MemberStatusBadge status={member.status} /></td>

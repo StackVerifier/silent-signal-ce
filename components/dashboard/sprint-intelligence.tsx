@@ -4,7 +4,8 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { AlertTriangle, CheckCircle, Clock, Zap, TrendingDown, Plus } from 'lucide-react'
 import { SectionCard, ScoreBar, PriorityBadge, RiskLevelBadge } from './shared'
-import { sprints } from '@/lib/mock-data'
+import { useSprints } from '@/lib/query/hooks'
+import type { Sprint } from '@/lib/types'
 import type { Issue, IssueStatus } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -115,7 +116,7 @@ function IssueRow({ issue, index }: { issue: Issue; index: number }) {
   )
 }
 
-function SprintHealthPanel({ sprint }: { sprint: typeof sprints[0] }) {
+function SprintHealthPanel({ sprint }: { sprint: Sprint }) {
   const completionPct = Math.round((sprint.completedPoints / sprint.totalPoints) * 100)
   const daysLeft = Math.max(0, Math.ceil((sprint.endDate.getTime() - Date.now()) / 86400000))
   const totalDays = Math.ceil((sprint.endDate.getTime() - sprint.startDate.getTime()) / 86400000)
@@ -233,6 +234,7 @@ function SprintHealthPanel({ sprint }: { sprint: typeof sprints[0] }) {
 }
 
 export function SprintIntelligence() {
+  const sprints = useSprints().data ?? []
   const sprint = sprints[0]
   const [selectedSprint, setSelectedSprint] = useState(sprint.id)
   const [statusFilter, setStatusFilter] = useState<string>('all')

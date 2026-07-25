@@ -14,12 +14,13 @@ import { useToast } from '@/components/ui/toast'
 import type { Team } from '@/lib/rbac/types'
 import { useAuth } from '@/lib/auth-context'
 import { PERMISSIONS } from '@/lib/rbac/permissions'
-import { mockDb } from '@/lib/mock-db'
+import { useMembers } from '@/lib/query/hooks'
 
 export default function TeamsPage() {
   const { can, workspace } = useAuth()
   const teams = useGatedQuery(useTeams(), { permission: PERMISSIONS.TEAMS_READ })
   const workspaces = useWorkspaces()
+  const allMembers = useMembers().data?.data ?? []
   const deleteTeam = useDeleteTeam()
   const toast = useToast()
   const canWrite = can(PERMISSIONS.TEAMS_WRITE)
@@ -102,7 +103,6 @@ export default function TeamsPage() {
 
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                     {group.teams.map((team, index) => {
-                      const allMembers = mockDb.members()
                       const members = allMembers.filter((member) => member.teamIds.includes(team.id))
                       const releaseManager = allMembers.find((m) => m.id === team.releaseManagerId)
                       const qaLead = allMembers.find((m) => m.id === team.qaLeadId)
