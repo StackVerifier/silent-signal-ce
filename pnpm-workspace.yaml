@@ -16,22 +16,35 @@ minimumReleaseAge: 1440
 overrides:
   hono: 4.12.25
 
-# pnpm 10 refuses to run a dependency's install scripts unless it is named
-# here — a package that runs arbitrary code at install time is exactly how a
-# compromised release does damage, so the allow-list is the point.
+# ─── Install scripts ──────────────────────────────────────────────────────────
 #
-# These three ship a platform-specific native binary that their install script
-# links; without it the tool does not run. `msw` is deliberately absent: its
-# script only writes a service worker for browser mocking, which nothing here
-# uses.
+# pnpm will not run a dependency's install script unless it is named here — a
+# package that runs arbitrary code at install time is exactly how a compromised
+# release does damage, so the allow-list is the point, not an annoyance.
+#
+# The decision is spelled twice because pnpm 10 and 11 read different keys.
+# pnpm 11 wants `allowBuilds` and errors on an unlisted package; pnpm 10 wants
+# the two list-shaped keys and ignores `allowBuilds` entirely. Keeping both
+# means the repository installs cleanly on either — `packageManager` in
+# package.json pins the version anyway, but a stray global pnpm should not turn
+# into a failed install.
+#
+# esbuild, sharp and unrs-resolver each link a platform-specific native binary
+# that they cannot run without. msw is refused: its script only writes a
+# service worker for browser request mocking, which nothing here uses.
+
+# pnpm 11
+allowBuilds:
+  esbuild: true
+  sharp: true
+  unrs-resolver: true
+  msw: false
+
+# pnpm 10
 onlyBuiltDependencies:
   - esbuild
   - sharp
   - unrs-resolver
 
-# Seen and deliberately not built. `msw` arrives via vitest and shadcn; its
-# install script only writes a browser service worker for request mocking,
-# which nothing here uses. Listing it records the decision so the install does
-# not stop to ask on every machine.
 ignoredBuiltDependencies:
   - msw
