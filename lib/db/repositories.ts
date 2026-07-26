@@ -173,6 +173,40 @@ export const notificationRepo = {
 // ─── Tenancy ──────────────────────────────────────────────────────────────────
 
 export const orgRepo = {
+  /**
+   * Changes the audit retention window.
+   *
+   * Shortening it destroys records, which is a governance decision, so the
+   * change is audited as a security event — and written before the next purge
+   * can act on the new value.
+   */
+  async setRetentionDays(
+    organizationId: string, days: number, actorId: string,
+  ): Promise<Organization> {
+    return transaction(async () => {
+      const row = await one<{ settings: string }>(
+        'SELECT settings FROM organization WHERE id = ?', organizationId,
+      )
+      if (!row) throw new NotFoundError('Organization not found')
+
+      const settings = JSON.parse(row.settings) as Record<string, unknown>
+      const before = Number(settings.dataRetentionDays ?? 365)
+      settings.dataRetentionDays = days
+
+      await run('UPDATE organization SET settings = ? WHERE id = ?',
+        JSON.stringify(settings), organizationId)
+
+      await writeAudit({
+        event: 'security.settings_changed',
+        organizationId, actorId,
+        target: { type: 'organization', id: organizationId },
+        changes: { dataRetentionDays: { before, after: days } },
+      })
+
+      return (await orgRepo.get(organizationId))!
+    })
+  },
+
   async get(organizationId: string): Promise<Organization | null> {
     const row = await one<{
       id: string; name: string; slug: string; logo: string | null; plan: string

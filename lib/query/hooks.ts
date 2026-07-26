@@ -7,6 +7,7 @@ import { queryKeys, queryScopes } from './keys'
 import {
   auditService, dashboardService, jiraService, memberService, notificationService,
   qaService, releaseService, riskService, ruleService, sprintService, billingService,
+  organizationService,
 } from '@/services'
 import type { MemberQuery } from '@/services/member.service'
 import type { WebhookInput } from '@/services/notification.service'
@@ -490,6 +491,16 @@ export function useAuditRecord(id: string | null) {
     queryKey: ['audit', 'record', id],
     queryFn: ({ signal }) => auditService.get(id!, signal),
     enabled: enabled && Boolean(id),
+  })
+}
+
+export function useSetRetention() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (days: number) => organizationService.setRetention(days),
+    // The change itself writes an audit record, so the log must be refetched
+    // or the screen would show a retention window with no trace of who set it.
+    onSuccess: () => { void client.invalidateQueries({ queryKey: ['audit'] }) },
   })
 }
 
