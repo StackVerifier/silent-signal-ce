@@ -4,9 +4,70 @@ import { SettingsPageHeader } from '@/components/settings/page-header'
 import { useAuth } from '@/lib/auth-context'
 import { motion } from 'framer-motion'
 import { Settings, Shield, Lock } from 'lucide-react'
+import { RETENTION_OPTIONS, retentionLabel } from '@/lib/audit/retention-options'
+import { useSetRetention } from '@/lib/query/hooks'
+import { useToast } from '@/components/ui/toast'
+import { PERMISSIONS } from '@/lib/rbac/permissions'
+
+/**
+ * The audit retention window.
+ *
+ * Configurable rather than fixed because keeping personal data forever is not
+ * the safe default it sounds like — GDPR and KVKK both require a purpose and a
+ * limit — while too short a window makes the log useless for the incident
+ * reviews it exists for. The options span both constraints; free entry does
+ * not, which is why there is no number field here.
+ */
+function RetentionSetting({ current, canEdit }: { current: number; canEdit: boolean }) {
+  const setRetention = useSetRetention()
+  const toast = useToast()
+
+  const onChange = async (days: number) => {
+    try {
+      await setRetention.mutateAsync(days)
+      toast.success('Retention updated', `Audit records are kept for ${retentionLabel(days)}.`)
+    } catch (error) {
+      toast.error('Could not update retention', error instanceof Error ? error.message : undefined)
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-[#64748B]">
+        Audit records are kept for{' '}
+        <strong className="text-[#E2E8F0]">{retentionLabel(current)}</strong>, then
+        deleted by the nightly retention job. The purge itself is recorded, so the
+        log cannot shrink without a trace.
+      </p>
+      {canEdit ? (
+        <div className="flex flex-wrap gap-1.5">
+          {RETENTION_OPTIONS.map((days) => (
+            <button
+              key={days}
+              onClick={() => onChange(days)}
+              disabled={setRetention.isPending}
+              aria-pressed={days === current}
+              className={
+                days === current
+                  ? 'text-[11px] font-medium px-2.5 py-1.5 rounded-lg border bg-[#6C63FF]/15 text-[#8B85FF] border-[#6C63FF]/40'
+                  : 'text-[11px] font-medium px-2.5 py-1.5 rounded-lg border bg-[#070B18] text-[#64748B] border-[#1E2D4A] hover:text-[#94A3B8] hover:border-[#2A3B5C] transition-colors disabled:opacity-50'
+              }
+            >
+              {retentionLabel(days)}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="text-[11px] text-[#64748B]">
+          Changing this needs the settings permission.
+        </p>
+      )}
+    </div>
+  )
+}
 
 export default function WorkspacePage() {
-  const { organization } = useAuth()
+  const { organization, can } = useAuth()
   if (!organization) return null
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -93,9 +154,10 @@ export default function WorkspacePage() {
               <Lock className="w-5 h-5 text-[#6C63FF]" />
               Data Retention
             </h2>
-            <p className="text-sm text-[#64748B] mb-3">
-              Workspace data is retained for <strong className="text-[#E2E8F0]">{organization.settings.dataRetentionDays} days</strong> after deletion.
-            </p>
+            <RetentionSetting
+              current={organization.settings.dataRetentionDays}
+              canEdit={can(PERMISSIONS.SETTINGS_WRITE)}
+            />
           </motion.div>
         </div>
       </div>

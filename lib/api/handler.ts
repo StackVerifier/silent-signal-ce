@@ -73,6 +73,10 @@ export function route<T>(
     try {
       const result = await runWithAuditContext(auditContext, () =>
         handler({ ...session, workspaceId }, request))
+      // A handler that builds its own Response — a file download, say — has
+      // already chosen its content type and headers; wrapping it in JSON would
+      // corrupt it.
+      if (result instanceof Response) return result
       return result === undefined
         ? new NextResponse(null, { status: 204 })
         : NextResponse.json(result)

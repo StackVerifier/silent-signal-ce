@@ -4,6 +4,8 @@ import { legacyShape } from './legacy'
 import { auditEvent, type AuditEventId, type AuditSource, type AuditStatus } from './events'
 import { currentAuditContext } from './context'
 import { redactChanges, redactMetadata, type FieldChange } from './redact'
+import { shouldAlert } from './alerts'
+import { notifyAuditEvent } from './notify'
 import type { AuditPage, AuditQuery, AuditRecord, AuditRelations, AuditTarget } from './types'
 
 /**
@@ -110,6 +112,7 @@ export async function writeAudit(entry: AuditWrite): Promise<void> {
     : null
 
   const { action, resource } = legacyShape(entry.event)
+  const createdAt = nowIso()
 
   await run(
     `INSERT INTO audit_log (
@@ -152,8 +155,35 @@ export async function writeAudit(entry: AuditWrite): Promise<void> {
     context?.device ?? null,
     context?.sessionId ?? null,
     context?.correlationId ?? null,
-    nowIso(),
+    createdAt,
   )
+
+  // Fanning out happens after the row exists and is deliberately not awaited:
+  // the audit record is the durable fact, and an unreachable Slack workspace
+  // must not roll back the suspension that triggered the alert or make the
+  // request wait on a webhook.
+  if (entry.organizationId && shouldAlert({ event: entry.event, severity: definition.severity, status: entry.status ?? 'success' })) {
+    void notifyAuditEvent({
+      id: '',
+      event: entry.event,
+      category: definition.category,
+      severity: definition.severity,
+      status: entry.status ?? 'success',
+      source: entry.source ?? context?.source ?? 'system',
+      organizationId: entry.organizationId,
+      workspaceId: entry.workspaceId ?? undefined,
+      workspaceName: entry.workspaceName ?? undefined,
+      actor: {
+        id: entry.actorId ?? '',
+        name: entry.actor?.name ?? actor?.name ?? 'System',
+        email: entry.actor?.email ?? actor?.email ?? 'system@silentsignal.local',
+      },
+      target: entry.target,
+      changes: entry.changes,
+      relations: entry.relations,
+      createdAt: new Date(createdAt),
+    })
+  }
 }
 
 /**

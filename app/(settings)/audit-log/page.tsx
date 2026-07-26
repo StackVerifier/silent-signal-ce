@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { FileText, ShieldAlert } from 'lucide-react'
+import { Download, FileText, ShieldAlert } from 'lucide-react'
 import { SettingsPageHeader } from '@/components/settings/page-header'
 import { useAuditLog } from '@/lib/query/hooks'
 import { useGatedQuery } from '@/hooks/use-gated-data'
@@ -30,6 +30,38 @@ import { Skeleton } from '@/components/ui/skeleton'
  * not a footnote. And credentials never appear, because a record kept for years
  * and exported to spreadsheets is the worst possible home for a live secret.
  */
+
+/**
+ * Export respects the filters on screen — a report that silently covers a
+ * different set than the one the reviewer was looking at is worse than no
+ * report. A plain link rather than fetch-and-blob: the browser handles the
+ * download, the Content-Disposition header names the file, and nothing has to
+ * hold ten thousand rows in memory to save them.
+ */
+function ExportMenu({ query }: { query: AuditQuery }) {
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(query)) {
+    if (value === undefined || value === null || value === '') continue
+    params.set(key, Array.isArray(value) ? value.join(',') : String(value))
+  }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      {(['csv', 'json'] as const).map((format) => (
+        <a
+          key={format}
+          href={`/api/audit/export?${new URLSearchParams({ ...Object.fromEntries(params), format })}`}
+          download
+          className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#94A3B8] hover:text-[#E2E8F0] border border-[#1E2D4A] hover:border-[#2A3B5C] rounded-lg px-2.5 py-1.5 transition-colors"
+        >
+          <Download aria-hidden="true" className="w-3 h-3" />
+          {format.toUpperCase()}
+        </a>
+      ))}
+    </div>
+  )
+}
+
 export default function AuditLogPage() {
   const { permissions } = useAuth()
   const visibility = auditVisibility(permissions)
@@ -48,6 +80,7 @@ export default function AuditLogPage() {
         <SettingsPageHeader
           title="Audit Log"
           description="Who changed what, when, and from where"
+          action={visibility.canExport ? <ExportMenu query={query} /> : undefined}
         />
 
         <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6">

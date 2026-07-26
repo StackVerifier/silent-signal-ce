@@ -99,7 +99,16 @@ export const JOBS: JobDefinition[] = [
     intervalSeconds: 24 * HOUR,
     timeoutMs: 60_000,
     maxAttempts: 1,
-    handler: async () => ({ summary: 'Applied the audit retention policy' }),
+    handler: async () => {
+      const { purgeExpiredAudit } = await import('@/lib/audit/retention')
+      const { deleted, organizations } = await purgeExpiredAudit()
+      return {
+        summary: deleted === 0
+          ? 'No audit records past their retention window'
+          : `Purged ${deleted} audit record(s) across ${organizations} organization(s)`,
+        metrics: { deleted, organizations },
+      }
+    },
   },
 ]
 
