@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@/lib/forms/zod-resolver'
 import { z } from 'zod'
-import { Send } from 'lucide-react'
+import { AlertTriangle, Check, Copy, Send } from 'lucide-react'
 import { Dialog, DialogButton } from '@/components/ui/dialog'
 import { SelectField, TextField } from '@/components/forms/fields'
 import { useToast } from '@/components/ui/toast'
@@ -38,6 +38,11 @@ export function InviteMemberDialog({
   const { role, workspace, organization } = useAuth()
   const invite = useInviteMember()
   const toast = useToast()
+  const [issued, setIssued] = useState<{ email: string; url: string } | null>(null)
+
+  // Clearing the issued link on close stops a reopened dialog from showing the
+  // previous invitation's link.
+  const close = () => { setIssued(null); onClose() }
   const workspaces = useWorkspaces()
   const teams = useTeams()
 
@@ -70,17 +75,17 @@ export function InviteMemberDialog({
 
   const onSubmit = handleSubmit(async (values) => {
     try {
-      await invite.mutateAsync({
+      const created = await invite.mutateAsync({
         email: values.email,
         roleId: values.roleId as RoleId,
         workspaceId: values.workspaceId,
         teamId: values.teamId || undefined,
       })
-      toast.success(
-        'Invitation sent',
-        `${values.email} will receive a link that expires in ${organization?.settings.invitationExpiryDays ?? 7} days.`,
-      )
-      onClose()
+      // The link is shown rather than emailed, because there is no email
+      // provider configured. Claiming "invitation sent" while nothing was sent
+      // is how an invited person ends up waiting for a message that will never
+      // arrive.
+      setIssued({ email: values.email, url: created.acceptUrl })
     } catch (error) {
       // Duplicate email and already-a-member are field-level problems, not
       // page-level failures, so they belong on the input.
@@ -93,20 +98,36 @@ export function InviteMemberDialog({
     <Dialog
       open={open}
       onClose={onClose}
-      title="Invite member"
-      description="They receive an email invitation and arrive with the workspace, team and role already assigned."
+      title={issued ? 'Invitation ready' : 'Invite member'}
+      description={
+        issued
+          ? 'Send this link to them. It is shown once and cannot be recovered afterwards.'
+          : 'They arrive with the workspace, team and role already assigned.'
+      }
       footer={
-        <>
-          <DialogButton variant="ghost" type="button" onClick={onClose}>
-            Cancel
-          </DialogButton>
-          <DialogButton type="submit" form="invite-member-form" disabled={isSubmitting}>
-            <Send aria-hidden="true" className="w-3.5 h-3.5" />
-            {isSubmitting ? 'Sending…' : 'Send invitation'}
-          </DialogButton>
-        </>
+        issued ? (
+          <DialogButton type="button" onClick={close}>Done</DialogButton>
+        ) : (
+          <>
+            <DialogButton variant="ghost" type="button" onClick={close}>
+              Cancel
+            </DialogButton>
+            <DialogButton type="submit" form="invite-member-form" disabled={isSubmitting}>
+              <Send aria-hidden="true" className="w-3.5 h-3.5" />
+              {isSubmitting ? 'Creating…' : 'Create invitation'}
+            </DialogButton>
+          </>
+        )
       }
     >
+      {issued ? (
+        <InviteLink
+          email={issued.email}
+          url={issued.url}
+          expiryDays={organization?.settings.invitationExpiryDays ?? 7}
+          onCopied={() => toast.success('Link copied', 'Send it to them however you like.')}
+        />
+      ) : (
       <form id="invite-member-form" onSubmit={onSubmit} className="space-y-4">
         <TextField
           label="Email address"
@@ -143,6 +164,73 @@ export function InviteMemberDialog({
           {...register('teamId')}
         />
       </form>
+      )}
     </Dialog>
+  )
+}
+
+/**
+ * The generated link, shown once.
+ *
+ * Until an email provider is configured the inviter is the delivery mechanism,
+ * so the link has to be visible and easy to copy. It is deliberately not
+ * recoverable later: only a hash of the token is stored, and a list endpoint
+ * that could reproduce invitation links would be a standing way in.
+ */
+function InviteLink({
+  email, url, expiryDays, onCopied,
+}: {
+  email: string
+  url: string
+  expiryDays: number
+  onCopied: () => void
+}) {
+  const [copied, setCopied] = useState(false)
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopied(true)
+      onCopied()
+      window.setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // Clipboard access can be refused; the field is selectable either way.
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-[#94A3B8]">
+        Invitation for <span className="text-[#E2E8F0] font-medium">{email}</span>, valid for{' '}
+        {expiryDays} day{expiryDays === 1 ? '' : 's'}.
+      </p>
+
+      <div className="flex gap-2">
+        <input
+          readOnly
+          value={url}
+          onFocus={(event) => event.currentTarget.select()}
+          aria-label="Invitation link"
+          className="flex-1 min-w-0 h-9 px-2.5 rounded-lg bg-[#070B18] border border-[#1E2D4A] font-mono text-[11px] text-[#E2E8F0]"
+        />
+        <button
+          type="button"
+          onClick={copy}
+          className="shrink-0 inline-flex items-center gap-1.5 h-9 px-3 rounded-lg bg-[#6C63FF] hover:bg-[#5B52CC] text-white text-xs font-medium transition-colors"
+        >
+          {copied
+            ? <Check aria-hidden="true" className="w-3.5 h-3.5" />
+            : <Copy aria-hidden="true" className="w-3.5 h-3.5" />}
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+
+      <p className="flex items-start gap-2 text-[10px] text-[#F59E0B] bg-[#F59E0B]/5 border border-[#F59E0B]/20 rounded-lg px-2.5 py-2">
+        <AlertTriangle aria-hidden="true" className="w-3 h-3 shrink-0 mt-0.5" />
+        Anyone holding this link can join as that role. Send it directly to
+        {' '}{email}, and nowhere else. It cannot be shown again — use Resend to
+        issue a new one, which invalidates this.
+      </p>
+    </div>
   )
 }
