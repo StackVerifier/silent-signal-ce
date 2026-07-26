@@ -7,6 +7,9 @@ import type {
 import type {
   AuditAction, AuditLog, AuditResource, Integration, Notification, NotificationLevel, Rule,
 } from '@/lib/types'
+import { writeAudit } from '@/lib/audit/repository'
+import { diffFields } from '@/lib/audit/redact'
+import type { AuditEventId } from '@/lib/audit/events'
 
 // ─── Row shapes ───────────────────────────────────────────────────────────────
 
@@ -63,6 +66,10 @@ export interface AuditEntry {
 /**
  * Writes an audit record. Always called inside the same transaction as the
  * mutation it describes, so an action cannot succeed without leaving a trace.
+ *
+ * @deprecated Use `writeAudit` with a named event from the catalogue. This
+ * remains only for callers not yet migrated; it records `system.job_run`, which
+ * is honest about telling the reader nothing rather than guessing an event.
  */
 export async function recordAudit(entry: AuditEntry): Promise<void> {
   const actor = await one<MemberRow>('SELECT * FROM member WHERE id = ?', entry.actorId)
@@ -227,11 +234,16 @@ export const memberRepo = {
   },
 
   /** Server-side only — the hash never leaves this module's callers. */
-  async credentialsFor(email: string): Promise<{ memberId: string; passwordHash: string | null } | null> {
-    const row = await one<{ id: string; password_hash: string | null }>(
-      'SELECT id, password_hash FROM member WHERE lower(email) = lower(?)', email.trim(),
+  async credentialsFor(
+    email: string,
+  ): Promise<{ memberId: string; organizationId: string; passwordHash: string | null } | null> {
+    const row = await one<{ id: string; organization_id: string; password_hash: string | null }>(
+      'SELECT id, organization_id, password_hash FROM member WHERE lower(email) = lower(?)',
+      email.trim(),
     )
-    return row ? { memberId: row.id, passwordHash: row.password_hash } : null
+    return row
+      ? { memberId: row.id, organizationId: row.organization_id, passwordHash: row.password_hash }
+      : null
   },
 
   async setPassword(memberId: string, passwordHash: string, actorId: string): Promise<void> {
@@ -244,10 +256,11 @@ export const memberRepo = {
         passwordHash, toBit(false), nowIso(), memberId,
       )
       // The audit record deliberately carries no password material.
-      await recordAudit({
+      await writeAudit({
+        event: 'auth.password_changed',
         organizationId: member.organization_id,
-        actorId, action: 'update', resource: 'member', resourceId: memberId,
-        metadata: { field: 'password' },
+        actorId,
+        target: { type: 'member', id: memberId, name: member.name, email: member.email },
       })
     })
   },
@@ -277,16 +290,17 @@ export const memberRepo = {
         status, toBit(approving), actorId, toBit(approving), nowIso(), memberId,
       )
 
-      const action: AuditAction =
-        status === 'approved' ? (before.status === 'pending' ? 'approve' : 'activate')
-        : status === 'rejected' ? 'reject'
-        : status === 'suspended' ? 'suspend'
-        : 'update'
+      const event: AuditEventId =
+        status === 'approved' ? (before.status === 'pending' ? 'member.approved' : 'member.activated')
+        : status === 'rejected' ? 'member.rejected'
+        : status === 'suspended' ? 'member.suspended'
+        : 'member.updated'
 
-      recordAudit({
+      writeAudit({
+        event,
         organizationId: before.organization_id,
-        actorId, action, resource: 'member', resourceId: memberId,
-        metadata: { member: before.name },
+        actorId,
+        target: { type: 'member', id: memberId, name: before.name, email: before.email },
         changes: { status: { before: before.status, after: status } },
       })
 
@@ -315,10 +329,11 @@ export const memberRepo = {
       if (!member) throw new NotFoundError('Member not found')
       // Cascades clear member_workspace, member_team and notifications.
       await run('DELETE FROM member WHERE id = ?', memberId)
-      recordAudit({
+      writeAudit({
+        event: 'member.removed',
         organizationId: member.organization_id,
-        actorId, action: 'remove', resource: 'member', resourceId: memberId,
-        metadata: { member: member.name },
+        actorId,
+        target: { type: 'member', id: memberId, name: member.name, email: member.email },
       })
     })
   },
@@ -372,10 +387,11 @@ export const teamRepo = {
         input.description?.trim() || null,
         input.releaseManagerId || null, input.qaLeadId || null, nowIso(),
       )
-      recordAudit({
+      writeAudit({
+        event: 'team.created',
         organizationId: input.organizationId, workspaceId: input.workspaceId,
-        actorId, action: 'create', resource: 'team', resourceId: id,
-        metadata: { name: input.name },
+        actorId,
+        target: { type: 'team', id, name: input.name },
       })
       return (await teamRepo.list(input.organizationId)).find((team) => team.id === id)!
     })
@@ -397,11 +413,17 @@ export const teamRepo = {
         patch.qaLeadId ?? existing.qa_lead_id,
         teamId,
       )
-      recordAudit({
+      writeAudit({
+        event: 'team.updated',
         organizationId: existing.organization_id as string,
         workspaceId: (patch.workspaceId ?? existing.workspace_id) as string,
-        actorId, action: 'update', resource: 'team', resourceId: teamId,
-        metadata: { name: patch.name ?? existing.name },
+        actorId,
+        target: { type: 'team', id: teamId, name: (patch.name ?? existing.name) as string },
+        changes: diffFields(
+          existing as Record<string, unknown>,
+          { name: patch.name, description: patch.description, workspace_id: patch.workspaceId },
+          ['name', 'description', 'workspace_id'],
+        ),
       })
       return (await teamRepo.list(existing.organization_id as string)).find((team) => team.id === teamId)!
     })
@@ -412,11 +434,12 @@ export const teamRepo = {
       const existing = await one<Record<string, string | null>>('SELECT * FROM team WHERE id = ?', teamId)
       if (!existing) throw new NotFoundError('Team not found')
       await run('DELETE FROM team WHERE id = ?', teamId)   // member_team cascades
-      recordAudit({
+      writeAudit({
+        event: 'team.deleted',
         organizationId: existing.organization_id as string,
         workspaceId: existing.workspace_id as string,
-        actorId, action: 'delete', resource: 'team', resourceId: teamId,
-        metadata: { name: existing.name },
+        actorId,
+        target: { type: 'team', id: teamId, name: existing.name as string },
       })
     })
   },
@@ -430,11 +453,13 @@ export const teamRepo = {
       for (const memberId of memberIds) {
         await run('INSERT OR IGNORE INTO member_team (member_id, team_id) VALUES (?, ?)', memberId, teamId)
       }
-      recordAudit({
+      writeAudit({
+        event: 'team.members_changed',
         organizationId: existing.organization_id as string,
         workspaceId: existing.workspace_id as string,
-        actorId, action: 'transfer', resource: 'team', resourceId: teamId,
-        metadata: { name: existing.name, memberCount: memberIds.length },
+        actorId,
+        target: { type: 'team', id: teamId, name: existing.name as string },
+        metadata: { memberCount: memberIds.length },
       })
     })
   },
@@ -492,10 +517,12 @@ export const invitationRepo = {
         input.teamId ?? null, newId('tok'), actorId, nowIso(),
         new Date(Date.now() + input.expiryDays * 86400000).toISOString(),
       )
-      recordAudit({
+      writeAudit({
+        event: 'member.invited',
         organizationId: input.organizationId, workspaceId: input.workspaceId,
-        actorId, action: 'invite', resource: 'invitation', resourceId: id,
-        metadata: { invitedEmail: email },
+        actorId,
+        target: { type: 'invitation', id, email },
+        metadata: { roleId: input.roleId },
       })
       return (await invitationRepo.list(input.organizationId)).find((item) => item.id === id)!
     })
@@ -514,10 +541,11 @@ export const invitationRepo = {
          WHERE id = ?`,
         nowIso(), new Date(Date.now() + expiryDays * 86400000).toISOString(), invitationId,
       )
-      recordAudit({
+      writeAudit({
+        event: 'member.invite_resent',
         organizationId: existing.organization_id as string,
-        actorId, action: 'update', resource: 'invitation', resourceId: invitationId,
-        metadata: { invitedEmail: existing.email, resent: true },
+        actorId,
+        target: { type: 'invitation', id: invitationId, email: existing.email as string },
       })
     })
   },
@@ -529,10 +557,11 @@ export const invitationRepo = {
       )
       if (!existing) throw new NotFoundError('Invitation not found')
       await run("UPDATE invitation SET status = 'cancelled' WHERE id = ?", invitationId)
-      recordAudit({
+      writeAudit({
+        event: 'member.invite_revoked',
         organizationId: existing.organization_id as string,
-        actorId, action: 'delete', resource: 'invitation', resourceId: invitationId,
-        metadata: { invitedEmail: existing.email },
+        actorId,
+        target: { type: 'invitation', id: invitationId, email: existing.email as string },
       })
     })
   },
@@ -593,11 +622,11 @@ export const integrationRepo = {
         )
       }
 
-      recordAudit({
+      writeAudit({
+        event: enabled ? 'integration.connected' : 'integration.disconnected',
         organizationId, workspaceId, actorId,
-        action: 'update', resource: 'integration', resourceId: type,
+        target: { type: 'integration', id: type, name: type },
         changes: { enabled: { before: existing ? fromBit(existing.enabled) : false, after: enabled } },
-        metadata: { integration: type },
       })
 
       return (await integrationRepo.list(workspaceId)).find((item) => item.type === type)!
@@ -699,11 +728,15 @@ export const webhookRepo = {
         toBit(input.enabled), input.quietHours ? JSON.stringify(input.quietHours) : null,
         actorId, nowIso(), nowIso(),
       )
-      recordAudit({
+      writeAudit({
+        event: 'notification.endpoint_created',
         organizationId: input.organizationId, workspaceId: input.workspaceId,
-        actorId, action: 'create', resource: 'integration', resourceId: id,
-        // The URL is a credential and must never reach the audit log either.
-        metadata: { channel: input.channel, label: input.label },
+        actorId,
+        // The URL is a credential; only the channel and label are recorded, and
+        // the masker would catch it even if that changed.
+        target: { type: 'webhook', id, name: input.label },
+        metadata: { channel: input.channel },
+        relations: { notificationChannel: input.channel },
       })
       return (await webhookRepo.list(input.workspaceId)).find((item) => item.id === id)!
     })
@@ -743,10 +776,18 @@ export const webhookRepo = {
         nowIso(), toBit(Boolean(patch.url)), webhookId,
       )
 
-      recordAudit({
+      writeAudit({
+        event: 'notification.endpoint_updated',
         organizationId, workspaceId: existing.workspace_id,
-        actorId, action: 'update', resource: 'integration', resourceId: webhookId,
-        metadata: { channel: existing.channel, label: patch.label ?? existing.label },
+        actorId,
+        target: { type: 'webhook', id: webhookId, name: patch.label ?? existing.label },
+        metadata: { channel: existing.channel, urlRotated: Boolean(patch.url) },
+        changes: diffFields(
+          { label: existing.label, minimumLevel: existing.minimum_level, enabled: fromBit(existing.enabled) },
+          { label: patch.label, minimumLevel: patch.minimumLevel, enabled: patch.enabled },
+          ['label', 'minimumLevel', 'enabled'],
+        ),
+        relations: { notificationChannel: existing.channel },
       })
       return (await webhookRepo.list(existing.workspace_id)).find((item) => item.id === webhookId)!
     })
@@ -757,10 +798,13 @@ export const webhookRepo = {
       const existing = await one<WebhookRow>('SELECT * FROM webhook_endpoint WHERE id = ?', webhookId)
       if (!existing) throw new NotFoundError('Webhook not found')
       await run('DELETE FROM webhook_endpoint WHERE id = ?', webhookId)
-      recordAudit({
+      writeAudit({
+        event: 'notification.endpoint_deleted',
         organizationId, workspaceId: existing.workspace_id,
-        actorId, action: 'delete', resource: 'integration', resourceId: webhookId,
-        metadata: { channel: existing.channel, label: existing.label },
+        actorId,
+        target: { type: 'webhook', id: webhookId, name: existing.label },
+        metadata: { channel: existing.channel },
+        relations: { notificationChannel: existing.channel },
       })
     })
   },
@@ -849,11 +893,12 @@ export const ruleRepo = {
       if (!existing) throw new NotFoundError('Rule not found')
 
       await run('UPDATE rule SET enabled = ? WHERE id = ?', toBit(enabled), ruleId)
-      recordAudit({
+      writeAudit({
+        event: enabled ? 'rule.enabled' : 'rule.disabled',
         organizationId, workspaceId, actorId,
-        action: 'update', resource: 'rule', resourceId: ruleId,
-        metadata: { name: existing.name },
+        target: { type: 'rule', id: ruleId, name: existing.name },
         changes: { enabled: { before: fromBit(existing.enabled), after: enabled } },
+        relations: { ruleId, ruleName: existing.name },
       })
       return (await ruleRepo.list(workspaceId)).find((rule) => rule.id === ruleId)!
     })

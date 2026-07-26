@@ -478,6 +478,27 @@ export function useAuditLog(params: Parameters<typeof auditService.list>[0] = {}
     queryKey: queryKeys.audit(params),
     queryFn: ({ signal }) => auditService.list(params, signal),
     enabled,
+    // Keeping the previous page while a filter change is in flight stops the
+    // whole timeline blanking on every keystroke in the search box.
     placeholderData: (previous) => previous,
+  })
+}
+
+export function useAuditRecord(id: string | null) {
+  const { enabled } = useGate(PERMISSIONS.AUDIT_READ)
+  return useQuery({
+    queryKey: ['audit', 'record', id],
+    queryFn: ({ signal }) => auditService.get(id!, signal),
+    enabled: enabled && Boolean(id),
+  })
+}
+
+export function useAuditActors() {
+  const { enabled } = useGate(PERMISSIONS.AUDIT_READ)
+  return useQuery({
+    queryKey: ['audit', 'actors'],
+    queryFn: ({ signal }) => auditService.actors(signal),
+    enabled,
+    staleTime: 5 * 60_000,
   })
 }

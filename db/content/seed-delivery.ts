@@ -1,9 +1,9 @@
 import type {
   DashboardMetrics, ServiceHealth, LiveSignal,
   Sprint, Release, QAItem, QATester, Rule, Signal,
-  Notification, AuditLog, Integration, BillingInfo, RiskTimelineEvent
+  Notification, Integration, BillingInfo, RiskTimelineEvent
 } from '../../lib/types'
-import { seedMembers } from './seed-tenancy.ts'
+import type { AuditEventId, AuditSource, AuditStatus } from '../../lib/audit/events.ts'
 
 // ─── Dashboard Metrics ────────────────────────────────────────────────────────
 
@@ -366,11 +366,6 @@ export const riskTimeline: RiskTimelineEvent[] = [
 // ─── Users ────────────────────────────────────────────────────────────────────
 
 // Actors referenced by audit records — projected from the tenancy graph.
-const actor = (id: string) => {
-  const member = seedMembers.find((candidate) => candidate.id === id)!
-  return { id: member.id, name: member.name, email: member.email, avatar: member.avatar }
-}
-
 // ─── Notifications ────────────────────────────────────────────────────────────
 
 export const seedNotifications: Notification[] = [
@@ -448,69 +443,142 @@ const moreNotifications: Notification[] = [
 
 seedNotifications.push(...moreNotifications)
 
-// ─── Audit Logs ───────────────────────────────────────────────────────────────
+// ─── Audit Log ────────────────────────────────────────────────────────────────
+//
+// Seeded so the screen has something to demonstrate on a fresh install. The
+// spread is deliberate: several severities, a denied attempt, a failed sign-in,
+// a permission change, and a webhook update whose URL is already masked —
+// together they exercise every branch of the timeline and the detail drawer.
 
-export const seedAuditLogs: AuditLog[] = [
+export interface SeedAuditRecord {
+  event: AuditEventId
+  organizationId: string
+  workspaceId?: string
+  workspaceName?: string
+  actorId: string
+  target?: { type: string; id: string; name?: string; email?: string }
+  status?: AuditStatus
+  source?: AuditSource
+  changes?: Record<string, { before: unknown; after: unknown }>
+  metadata?: Record<string, unknown>
+  relations?: Record<string, string>
+  ipAddress?: string
+  device?: string
+  correlationId?: string
+  createdAt: Date
+}
+
+const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000)
+
+export const seedAuditRecords: SeedAuditRecord[] = [
   {
-    id: 'audit-1',
-    organizationId: 'org-1',
-    workspaceId: 'ws-1',
-    userId: 'mem-1',
-    user: actor('mem-1'),
-    action: 'update',
-    resource: 'rule',
-    resourceId: 'rule-1',
-    changes: { 'enabled': { before: false, after: true } },
-    createdAt: new Date(Date.now() - 3600000),
+    event: 'rule.enabled',
+    organizationId: 'org-1', workspaceId: 'ws-1', workspaceName: 'Production',
+    actorId: 'mem-1',
+    target: { type: 'rule', id: 'rule-1', name: 'Payment Timeout' },
+    changes: {
+      enabled: { before: false, after: true },
+      severity: { before: 'medium', after: 'high' },
+      threshold: { before: 10, after: 5 },
+    },
+    relations: { ruleId: 'rule-1', ruleName: 'Payment Timeout' },
+    ipAddress: '10.42.0.18', device: 'Chrome on macOS',
+    createdAt: minutesAgo(60),
   },
   {
-    id: 'audit-2',
-    organizationId: 'org-1',
-    workspaceId: 'ws-1',
-    userId: 'mem-2',
-    user: actor('mem-2'),
-    action: 'invite',
-    resource: 'member',
-    resourceId: 'wm-4',
-    metadata: { invitedEmail: 'diana@company.com' },
-    createdAt: new Date(Date.now() - 86400000),
+    event: 'member.role_changed',
+    organizationId: 'org-1', workspaceId: 'ws-1', workspaceName: 'Production',
+    actorId: 'mem-2',
+    target: { type: 'member', id: 'mem-5', name: 'Elif Kaya', email: 'elif@boyner.com.tr' },
+    changes: { roleId: { before: 'developer', after: 'qa_lead' } },
+    ipAddress: '10.42.0.31', device: 'Firefox on Windows',
+    createdAt: minutesAgo(720),
   },
   {
-    id: 'audit-3',
+    event: 'notification.endpoint_updated',
+    organizationId: 'org-1', workspaceId: 'ws-1', workspaceName: 'Production',
+    actorId: 'mem-4',
+    target: { type: 'webhook', id: 'wh-1', name: 'Release alerts' },
+    // The URL is a credential; the masker replaces it before it is stored, and
+    // this seed shows what the reader will actually see.
+    changes: { url: { before: '••••••••', after: '••••••••' } },
+    metadata: { channel: 'slack', urlRotated: true },
+    relations: { notificationChannel: 'slack' },
+    ipAddress: '10.42.0.7', device: 'Chrome on macOS',
+    createdAt: minutesAgo(70),
+  },
+  {
+    event: 'member.approved',
+    organizationId: 'org-1', workspaceId: 'ws-1', workspaceName: 'Production',
+    actorId: 'mem-2',
+    target: { type: 'member', id: 'mem-9', name: 'İrem Yıldız', email: 'irem@boyner.com.tr' },
+    changes: { status: { before: 'pending', after: 'approved' } },
+    ipAddress: '10.42.0.31', device: 'Firefox on Windows',
+    createdAt: minutesAgo(120),
+  },
+  {
+    event: 'auth.login_failed',
     organizationId: 'org-1',
-    workspaceId: 'ws-1',
-    userId: 'mem-1',
-    user: actor('mem-1'),
-    action: 'update',
-    resource: 'workspace',
-    resourceId: 'ws-1',
-    changes: { 'twoFactorRequired': { before: false, after: false }, 'ssoEnabled': { before: false, after: true } },
-    createdAt: new Date(Date.now() - 172800000),
+    actorId: 'mem-6',
+    status: 'failed',
+    ipAddress: '203.0.113.44', device: 'curl',
+    source: 'api',
+    createdAt: minutesAgo(95),
+  },
+  {
+    event: 'authz.permission_denied',
+    organizationId: 'org-1', workspaceId: 'ws-1', workspaceName: 'Production',
+    actorId: 'mem-7',
+    status: 'denied',
+    metadata: { permission: 'billing.read', path: '/api/billing' },
+    ipAddress: '10.42.0.55', device: 'Chrome on Linux',
+    createdAt: minutesAgo(150),
+  },
+  {
+    event: 'team.created',
+    organizationId: 'org-1', workspaceId: 'ws-2', workspaceName: 'Mobile',
+    actorId: 'mem-1',
+    target: { type: 'team', id: 'team-5', name: 'Mobile Team' },
+    ipAddress: '10.42.0.18', device: 'Chrome on macOS',
+    createdAt: minutesAgo(360),
+  },
+  {
+    event: 'integration.connected',
+    organizationId: 'org-1', workspaceId: 'ws-1', workspaceName: 'Production',
+    actorId: 'mem-4',
+    target: { type: 'integration', id: 'jira', name: 'Jira Cloud' },
+    changes: { enabled: { before: false, after: true } },
+    ipAddress: '10.42.0.7', device: 'Chrome on macOS',
+    createdAt: minutesAgo(1440),
+  },
+  {
+    event: 'rule.created',
+    organizationId: 'org-1', workspaceId: 'ws-1', workspaceName: 'Production',
+    actorId: 'mem-3',
+    target: { type: 'rule', id: 'rule-12', name: 'QA wait over 5 days' },
+    relations: { ruleId: 'rule-12', ruleName: 'QA wait over 5 days' },
+    ipAddress: '10.42.0.22', device: 'Safari on macOS',
+    createdAt: minutesAgo(25),
+  },
+  {
+    event: 'security.data_exported',
+    organizationId: 'org-1', workspaceId: 'ws-1', workspaceName: 'Production',
+    actorId: 'mem-3',
+    target: { type: 'release', id: 'r1', name: 'Platform v2.4' },
+    metadata: { format: 'csv', rows: 812 },
+    relations: { releaseId: 'r1', releaseName: 'Platform v2.4' },
+    ipAddress: '10.42.0.22', device: 'Safari on macOS',
+    createdAt: minutesAgo(2160),
+  },
+  {
+    event: 'system.job_failed',
+    organizationId: 'org-1', workspaceId: 'ws-1', workspaceName: 'Production',
+    actorId: '',
+    status: 'failed', source: 'scheduler',
+    metadata: { job: 'jira.sync', error: 'credentials not configured' },
+    createdAt: minutesAgo(45),
   },
 ]
-
-const moreAuditLogs: AuditLog[] = [
-  { id: 'audit-4', organizationId: 'org-1', workspaceId: 'ws-1', userId: 'mem-3', user: actor('mem-3'),
-    action: 'create', resource: 'rule', resourceId: 'rule-12',
-    metadata: { name: 'QA wait over 5 days' }, createdAt: new Date(Date.now() - 1500000) },
-  { id: 'audit-5', organizationId: 'org-1', workspaceId: 'ws-1', userId: 'mem-4', user: actor('mem-4'),
-    action: 'update', resource: 'integration', resourceId: 'int-2',
-    metadata: { integration: 'Slack' }, createdAt: new Date(Date.now() - 4200000) },
-  { id: 'audit-6', organizationId: 'org-1', workspaceId: 'ws-1', userId: 'mem-2', user: actor('mem-2'),
-    action: 'approve', resource: 'member', resourceId: 'mem-9',
-    metadata: { member: 'İrem Yıldız' }, createdAt: new Date(Date.now() - 7200000) },
-  { id: 'audit-7', organizationId: 'org-1', workspaceId: 'ws-2', userId: 'mem-1', user: actor('mem-1'),
-    action: 'create', resource: 'team', resourceId: 'team-5',
-    metadata: { name: 'Mobile Team' }, createdAt: new Date(Date.now() - 21600000) },
-  { id: 'audit-8', organizationId: 'org-1', workspaceId: 'ws-1', userId: 'mem-2', user: actor('mem-2'),
-    action: 'permission_change', resource: 'member', resourceId: 'mem-5',
-    changes: { roleId: { before: 'viewer', after: 'developer' } }, createdAt: new Date(Date.now() - 43200000) },
-  { id: 'audit-9', organizationId: 'org-1', workspaceId: 'ws-1', userId: 'mem-3', user: actor('mem-3'),
-    action: 'export', resource: 'config', resourceId: 'release-v2.4',
-    createdAt: new Date(Date.now() - 129600000) },
-]
-
-seedAuditLogs.push(...moreAuditLogs)
 
 // ─── Integrations ─────────────────────────────────────────────────────────────
 

@@ -54,6 +54,11 @@ export const PERMISSIONS = {
   BILLING_WRITE: 'billing.write',
 
   AUDIT_READ: 'audit.read',
+  // Separate from AUDIT_READ on purpose: IP, device and session identify a
+  // person's movements, and security events reveal the shape of the access
+  // model. Granting the forensic detail with an ordinary read turns the audit
+  // log into a surveillance tool.
+  AUDIT_READ_SENSITIVE: 'audit.read_sensitive',
   AUDIT_EXPORT: 'audit.export',
 
   INTEGRATION_READ: 'integration.read',
@@ -134,6 +139,7 @@ export const PERMISSION_GROUPS: { id: string; label: string; permissions: Permis
     label: 'Governance & Billing',
     permissions: [
       PERMISSIONS.AUDIT_READ,
+      PERMISSIONS.AUDIT_READ_SENSITIVE,
       PERMISSIONS.AUDIT_EXPORT,
       PERMISSIONS.BILLING_READ,
       PERMISSIONS.BILLING_WRITE,
@@ -173,6 +179,7 @@ export const PERMISSION_DESCRIPTIONS: Record<Permission, string> = {
   'billing.read': 'View plan, usage and invoices',
   'billing.write': 'Change plan and payment details',
   'audit.read': 'View the audit log',
+  'audit.read_sensitive': 'See IP address, device, session and security events in the audit log',
   'audit.export': 'Export audit records',
   'integration.read': 'View connected integrations',
   'integration.write': 'Connect, configure and remove integrations',

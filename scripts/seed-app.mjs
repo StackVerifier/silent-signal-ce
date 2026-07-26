@@ -38,6 +38,8 @@ if (!usePostgres && existsSync(dbPath) && !force) {
 
 const tenancy = await import(pathToFileURL(resolve(root, 'db/content/seed-tenancy.ts')).href)
 const delivery = await import(pathToFileURL(resolve(root, 'db/content/seed-delivery.ts')).href)
+const { auditEvent } = await import(pathToFileURL(resolve(root, 'lib/audit/events.ts')).href)
+const { legacyShape } = await import(pathToFileURL(resolve(root, 'lib/audit/legacy.ts')).href)
 
 /**
  * Minimal execute/prepare shim so the rest of this script does not care which
@@ -221,17 +223,41 @@ try {
       notification.link ?? null, bit(notification.read), iso(notification.createdAt))
   }
 
+  // Category and severity come from the event catalogue, exactly as they do at
+  // runtime — seeded rows must not be able to disagree with written ones.
   const insertAudit = db.prepare(
-    `INSERT INTO audit_log (organization_id, workspace_id, actor_id, actor_name, actor_email,
-                            actor_avatar, action, resource, resource_id, changes, metadata, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO audit_log (
+       event, category, severity, status, source,
+       organization_id, workspace_id, workspace_name,
+       actor_id, actor_name, actor_email, actor_avatar, actor_role,
+       target_type, target_id, target_name, target_email,
+       action, resource, resource_id,
+       changes, metadata, relations,
+       ip_address, device, correlation_id, created_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
-  for (const entry of delivery.seedAuditLogs) {
-    insertAudit.run(entry.organizationId, entry.workspaceId ?? null, entry.userId,
-      entry.user.name, entry.user.email, entry.user.avatar ?? null, entry.action,
-      entry.resource, entry.resourceId ?? null,
+  const memberById = new Map(tenancy.seedMembers.map((member) => [member.id, member]))
+
+  for (const entry of delivery.seedAuditRecords) {
+    const definition = auditEvent(entry.event)
+    const actor = memberById.get(entry.actorId)
+    const legacy = legacyShape(entry.event)
+    insertAudit.run(
+      entry.event, definition.category, definition.severity,
+      entry.status ?? 'success', entry.source ?? 'dashboard',
+      entry.organizationId, entry.workspaceId ?? null, entry.workspaceName ?? null,
+      entry.actorId || null,
+      actor?.name ?? 'System', actor?.email ?? 'system@silentsignal.local',
+      actor?.avatar ?? null, actor?.roleId ?? null,
+      entry.target?.type ?? null, entry.target?.id ?? null,
+      entry.target?.name ?? null, entry.target?.email ?? null,
+      legacy.action, legacy.resource, entry.target?.id ?? null,
       entry.changes ? JSON.stringify(entry.changes) : null,
-      entry.metadata ? JSON.stringify(entry.metadata) : null, iso(entry.createdAt))
+      entry.metadata ? JSON.stringify(entry.metadata) : null,
+      entry.relations ? JSON.stringify(entry.relations) : null,
+      entry.ipAddress ?? null, entry.device ?? null, entry.correlationId ?? null,
+      iso(entry.createdAt),
+    )
   }
 
   // Delivery data belongs to the primary workspace until Jira sync assigns it.

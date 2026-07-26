@@ -7,6 +7,38 @@ import { STATUS_CAN_AUTHENTICATE, buildAccessContext } from '@/lib/rbac/access'
 import { getServerSession } from '@/lib/auth-server'
 import { needsRehash, hashPassword, verifyPassword } from '@/lib/auth/password'
 import { clientAddress, consume, reset } from '@/lib/auth/rate-limit'
+import { auditContextFrom, runWithAuditContext } from '@/lib/audit/context'
+import { writeAudit } from '@/lib/audit/repository'
+import type { AuditEventId } from '@/lib/audit/events'
+import type { AuditStatus } from '@/lib/audit/events'
+
+/**
+ * Authentication events, recorded outside any transaction.
+ *
+ * A failed sign-in has no mutation to ride along with, and it is precisely the
+ * record a security review asks for. Failures never throw: an audit write that
+ * can break the login path would be a denial-of-service on the product.
+ */
+async function recordAuth(
+  request: Request,
+  event: AuditEventId,
+  details: {
+    organizationId: string | null
+    actorId: string | null
+    actor?: { name: string; email: string }
+    status?: AuditStatus
+    metadata?: Record<string, unknown>
+  },
+) {
+  try {
+    await runWithAuditContext(
+      auditContextFrom(request, details.actorId ?? undefined),
+      () => writeAudit({ event, ...details }),
+    )
+  } catch {
+    // Recording must not break signing in.
+  }
+}
 
 export const dynamic = 'force-dynamic'
 
@@ -95,10 +127,24 @@ export async function POST(request: Request) {
   const address = clientAddress(request)
 
   const byAddress = consume(`ip:${address}`, PER_ADDRESS)
-  if (!byAddress.allowed) return tooManyAttempts(byAddress.retryAfter)
+  if (!byAddress.allowed) {
+    await recordAuth(request, 'auth.login_blocked', {
+      organizationId: null, actorId: null,
+      actor: { name: email, email },
+      status: 'denied', metadata: { limit: 'address' },
+    })
+    return tooManyAttempts(byAddress.retryAfter)
+  }
 
   const byAccount = consume(`email:${email}`, PER_ACCOUNT)
-  if (!byAccount.allowed) return tooManyAttempts(byAccount.retryAfter)
+  if (!byAccount.allowed) {
+    await recordAuth(request, 'auth.login_blocked', {
+      organizationId: null, actorId: null,
+      actor: { name: email, email },
+      status: 'denied', metadata: { limit: 'account' },
+    })
+    return tooManyAttempts(byAccount.retryAfter)
+  }
 
   const credentials = await memberRepo.credentialsFor(parsed.data.email)
 
@@ -112,6 +158,14 @@ export async function POST(request: Request) {
   // One message for both cases: a distinct "no such account" reply would let
   // anyone enumerate who belongs to the organization.
   if (!member) {
+    // The organization is unknown for an unrecognised address, so the record is
+    // filed against the one the attempted account belongs to when there is one.
+    await recordAuth(request, 'auth.login_failed', {
+      organizationId: credentials?.organizationId ?? null,
+      actorId: null,
+      actor: { name: email, email },
+      status: 'failed',
+    })
     return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 })
   }
 
@@ -148,6 +202,11 @@ export async function POST(request: Request) {
     roleId: member.roleId,
     status: member.status,
     expiresAt: Date.now() + SESSION_TTL_MS,
+  })
+
+  await recordAuth(request, 'auth.login', {
+    organizationId: member.organizationId,
+    actorId: member.id,
   })
 
   return NextResponse.json(payload)
