@@ -7,6 +7,7 @@ import type {
 } from '@/lib/rbac/types'
 import type {
   AuditAction, AuditLog, AuditResource, Integration, Notification, NotificationLevel, Rule,
+  RuleCondition,
 } from '@/lib/types'
 import { writeAudit } from '@/lib/audit/repository'
 import { diffFields } from '@/lib/audit/redact'
@@ -252,6 +253,63 @@ export const workspaceRepo = {
       archivedAt: toDate(row.archived_at),
     }))
   },
+
+  async create(
+    input: { organizationId: string; name: string; description?: string },
+    actorId: string,
+  ): Promise<Workspace> {
+    return transaction(async () => {
+      const name = input.name.trim()
+      if (!name) throw new ConflictError('Give the workspace a name')
+
+      const slug = slugify(name)
+      if (await one<{ id: string }>(
+        'SELECT id FROM workspace WHERE organization_id = ? AND slug = ?',
+        input.organizationId, slug,
+      )) {
+        throw new ConflictError('A workspace with that name already exists')
+      }
+
+      const id = newId('ws')
+      const now = nowIso()
+      await run(
+        `INSERT INTO workspace
+           (id, organization_id, name, slug, description, status, integration_ids,
+            created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'active', '[]', ?, ?)`,
+        id, input.organizationId, name, slug, input.description?.trim() || null, now, now,
+      )
+
+      // The creator joins it. A workspace nobody belongs to is invisible the
+      // moment it is made — including to the person who just made it.
+      await run(
+        'INSERT INTO member_workspace (member_id, workspace_id) VALUES (?, ?)',
+        actorId, id,
+      )
+
+      writeAudit({
+        event: 'workspace.created',
+        organizationId: input.organizationId, workspaceId: id, workspaceName: name,
+        actorId,
+        target: { type: 'workspace', id, name },
+      })
+
+      return (await workspaceRepo.list(input.organizationId)).find((item) => item.id === id)!
+    })
+  },
+}
+
+/** `Mobile Delivery` → `mobile-delivery`, and Turkish letters survive. */
+function slugify(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/ı/g, 'i').replace(/İ/g, 'i').replace(/ş/gi, 's')
+    .replace(/ğ/gi, 'g').replace(/ç/gi, 'c').replace(/ö/gi, 'o').replace(/ü/gi, 'u')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60)
 }
 
 export const memberRepo = {
@@ -297,6 +355,36 @@ export const memberRepo = {
         actorId,
         target: { type: 'member', id: memberId, name: member.name, email: member.email },
       })
+    })
+  },
+
+  /**
+   * A member editing their own display name.
+   *
+   * Separate from `setStatus` and role changes on purpose: this needs no
+   * permission beyond being the member, and it must not become a path to
+   * changing anything that carries privilege.
+   */
+  async updateOwnProfile(memberId: string, patch: { name: string }): Promise<Member> {
+    return transaction(async () => {
+      const before = await one<MemberRow>('SELECT * FROM member WHERE id = ?', memberId)
+      if (!before) throw new NotFoundError('Member not found')
+
+      const name = patch.name.trim()
+      if (!name) throw new ConflictError('Enter a name')
+
+      await run('UPDATE member SET name = ? WHERE id = ?', name, memberId)
+
+      if (name !== before.name) {
+        writeAudit({
+          event: 'member.updated',
+          organizationId: before.organization_id,
+          actorId: memberId,
+          target: { type: 'member', id: memberId, name, email: before.email },
+          changes: { name: { before: before.name, after: name } },
+        })
+      }
+      return (await memberRepo.get(memberId))!
     })
   },
 
@@ -1032,6 +1120,116 @@ export const ruleRepo = {
     }))
   },
 
+  async create(
+    input: {
+      workspaceId: string; organizationId: string
+      name: string; category: Rule['category']; action: Rule['action']
+      scoreImpact: number; description: string; conditions: RuleCondition[]
+      enabled: boolean
+    },
+    actorId: string,
+  ): Promise<Rule> {
+    return transaction(async () => {
+      const name = input.name.trim()
+      if (await one<{ id: string }>(
+        'SELECT id FROM rule WHERE workspace_id = ? AND lower(name) = lower(?)',
+        input.workspaceId, name,
+      )) {
+        throw new ConflictError('A rule with that name already exists in this workspace')
+      }
+
+      const id = newId('rule')
+      await run(
+        `INSERT INTO rule
+           (id, workspace_id, name, category, enabled, action, score_impact,
+            description, conditions, triggered_count)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+        id, input.workspaceId, name, input.category, toBit(input.enabled),
+        input.action, input.scoreImpact, input.description.trim(),
+        JSON.stringify(input.conditions),
+      )
+      writeAudit({
+        event: 'rule.created',
+        organizationId: input.organizationId, workspaceId: input.workspaceId, actorId,
+        target: { type: 'rule', id, name },
+        metadata: { category: input.category, scoreImpact: input.scoreImpact },
+        relations: { ruleId: id, ruleName: name },
+      })
+      return (await ruleRepo.list(input.workspaceId)).find((rule) => rule.id === id)!
+    })
+  },
+
+  async update(
+    ruleId: string,
+    workspaceId: string,
+    patch: Partial<{
+      name: string; category: Rule['category']; action: Rule['action']
+      scoreImpact: number; description: string; conditions: RuleCondition[]
+    }>,
+    actorId: string,
+    organizationId: string,
+  ): Promise<Rule> {
+    return transaction(async () => {
+      const before = await one<{
+        id: string; name: string; category: string; action: string
+        score_impact: number; description: string; conditions: string
+      }>('SELECT * FROM rule WHERE id = ? AND workspace_id = ?', ruleId, workspaceId)
+      if (!before) throw new NotFoundError('Rule not found')
+
+      const next = {
+        name: patch.name?.trim() ?? before.name,
+        category: patch.category ?? before.category,
+        action: patch.action ?? before.action,
+        scoreImpact: patch.scoreImpact ?? before.score_impact,
+        description: patch.description?.trim() ?? before.description,
+        conditions: patch.conditions ?? JSON.parse(before.conditions),
+      }
+
+      await run(
+        `UPDATE rule SET name = ?, category = ?, action = ?, score_impact = ?,
+                         description = ?, conditions = ?
+         WHERE id = ?`,
+        next.name, next.category, next.action, next.scoreImpact,
+        next.description, JSON.stringify(next.conditions), ruleId,
+      )
+
+      writeAudit({
+        event: 'rule.updated',
+        organizationId, workspaceId, actorId,
+        target: { type: 'rule', id: ruleId, name: next.name },
+        // A rule's threshold is the whole reason someone reads this record
+        // later: "why did the payment rule stop firing last Tuesday".
+        changes: diffFields(
+          {
+            name: before.name, category: before.category, action: before.action,
+            scoreImpact: before.score_impact, description: before.description,
+            conditions: JSON.parse(before.conditions),
+          },
+          next,
+        ),
+        relations: { ruleId, ruleName: next.name },
+      })
+      return (await ruleRepo.list(workspaceId)).find((rule) => rule.id === ruleId)!
+    })
+  },
+
+  async remove(
+    ruleId: string, workspaceId: string, actorId: string, organizationId: string,
+  ): Promise<void> {
+    await transaction(async () => {
+      const existing = await one<{ name: string }>(
+        'SELECT name FROM rule WHERE id = ? AND workspace_id = ?', ruleId, workspaceId,
+      )
+      if (!existing) throw new NotFoundError('Rule not found')
+      await run('DELETE FROM rule WHERE id = ?', ruleId)
+      writeAudit({
+        event: 'rule.deleted',
+        organizationId, workspaceId, actorId,
+        target: { type: 'rule', id: ruleId, name: existing.name },
+        relations: { ruleId, ruleName: existing.name },
+      })
+    })
+  },
   async setEnabled(
     ruleId: string, enabled: boolean, workspaceId: string,
     actorId: string, organizationId: string,

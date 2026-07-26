@@ -14,6 +14,10 @@ export interface MemberQuery {
 type MemberAction = 'approve' | 'reject' | 'suspend' | 'activate' | 'remove'
 
 export const memberService = {
+  /** The signed-in member's own profile. The server takes the id from the session. */
+  updateProfile: (input: { name: string }) =>
+    request<Member>('/api/profile', { method: 'PATCH', body: input }),
+
   list: (params: MemberQuery = {}, signal?: AbortSignal) =>
     request<Paginated<Member>>('/api/members', { query: { ...params }, signal }),
 

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import {
-  Check, Clock, Plug, RefreshCw, Settings2, AlertTriangle, ExternalLink,
+  Check, Clock, Plug, RefreshCw, Settings2, AlertTriangle,
 } from 'lucide-react'
 import { SettingsPageHeader } from '@/components/settings/page-header'
 import { PermissionGuard } from '@/components/rbac/permission-guard'
@@ -263,19 +263,14 @@ export default function IntegrationsPage() {
                     <h3 className="text-sm font-medium text-[#E2E8F0]">{integration.name}</h3>
                     <p className="text-[11px] text-[#64748B] mt-0.5">{integration.description}</p>
                   </div>
-                  {integration.comingSoon ? (
-                    <span className="text-[10px] font-semibold text-[#64748B] bg-[#64748B]/10 border border-[#64748B]/25 px-2 py-0.5 rounded-full">
-                      Planned
-                    </span>
-                  ) : (
-                    <button
-                      disabled={!canWrite}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[#1E2D4A] text-xs font-medium text-[#94A3B8] hover:text-[#E2E8F0] hover:border-[#6C63FF]/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                    >
-                      <ExternalLink aria-hidden="true" className="w-3.5 h-3.5" />
-                      Connect
-                    </button>
-                  )}
+                  {/* Jira is the only integration with a connection flow behind
+                      it, and it has its own card above. Everything in this list
+                      is unbuilt, so it is all labelled the same way — a Connect
+                      button with no handler taught anyone who clicked it that
+                      the product was broken rather than incomplete. */}
+                  <span className="text-[10px] font-semibold text-[#64748B] bg-[#64748B]/10 border border-[#64748B]/25 px-2 py-0.5 rounded-full">
+                    Planned
+                  </span>
                 </motion.div>
               ))}
             </div>

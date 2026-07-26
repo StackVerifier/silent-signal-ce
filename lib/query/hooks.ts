@@ -7,11 +7,12 @@ import { queryKeys, queryScopes } from './keys'
 import {
   auditService, dashboardService, jiraService, memberService, notificationService,
   qaService, releaseService, riskService, ruleService, sprintService, billingService,
-  organizationService,
+  organizationService, workspaceService,
 } from '@/services'
 import type { MemberQuery } from '@/services/member.service'
 import type { WebhookInput } from '@/services/notification.service'
 import type { JiraFieldMapping } from '@/services/jira.service'
+import type { RuleInput } from '@/services/rule.service'
 import type { RoleId, Team } from '@/lib/rbac/types'
 
 /**
@@ -260,6 +261,55 @@ export function useTeams() {
 }
 
 type MemberAction = 'approve' | 'reject' | 'suspend' | 'activate' | 'remove'
+
+export function useSaveRule() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ ruleId, ...input }: RuleInput & { ruleId?: string }) =>
+      ruleId ? ruleService.update(ruleId, input) : ruleService.create(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryScopes.allRules })
+      queryClient.invalidateQueries({ queryKey: queryScopes.allAudit })
+    },
+  })
+}
+
+export function useDeleteRule() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (ruleId: string) => ruleService.remove(ruleId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryScopes.allRules })
+      queryClient.invalidateQueries({ queryKey: queryScopes.allAudit })
+    },
+  })
+}
+
+export function useCreateWorkspace() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { name: string; description?: string }) =>
+      workspaceService.create(input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryScopes.allWorkspaces })
+      queryClient.invalidateQueries({ queryKey: queryScopes.allAudit })
+    },
+  })
+}
+
+export function useUpdateProfile() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { name: string }) => memberService.updateProfile(input),
+    onSuccess: () => {
+      // The name appears in the header, the member list and the audit log, so
+      // everything holding a copy has to refetch — and the session payload
+      // carries it too, which is why the page reloads.
+      queryClient.invalidateQueries()
+      window.location.reload()
+    },
+  })
+}
 
 export function useMemberAction() {
   const queryClient = useQueryClient()
