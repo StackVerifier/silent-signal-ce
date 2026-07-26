@@ -1,6 +1,7 @@
 import 'server-only'
 import { all, fromBit, newId, nowIso, one, run, toBit, toDate, transaction } from './driver'
 import { decryptSecret, encryptSecret, maskUrl } from './crypto'
+import { hashInvitationToken, newInvitationToken } from '@/lib/auth/invitation-token'
 import type {
   AccountStatus, Invitation, InvitationStatus, Member, Organization, RoleId, Team, Workspace,
 } from '@/lib/rbac/types'
@@ -530,7 +531,7 @@ export const invitationRepo = {
       workspaceId: string; teamId?: string; expiryDays: number
     },
     actorId: string,
-  ): Promise<Invitation> {
+  ): Promise<Invitation & { token: string }> {
     return transaction(async () => {
       const email = input.email.trim().toLowerCase()
 
@@ -542,13 +543,17 @@ export const invitationRepo = {
       }
 
       const id = newId('inv')
+      // The column is called token_hash and now actually holds one. It used to
+      // hold `newId('tok')` in clear, which meant a stolen database was a set
+      // of usable invitations — each one a way into the organization.
+      const token = newInvitationToken()
       await run(
         `INSERT INTO invitation
            (id, organization_id, email, role_id, workspace_id, team_id, status,
             token_hash, invited_by_id, invited_at, expires_at, resend_count)
          VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, 0)`,
         id, input.organizationId, email, input.roleId, input.workspaceId,
-        input.teamId ?? null, newId('tok'), actorId, nowIso(),
+        input.teamId ?? null, hashInvitationToken(token), actorId, nowIso(),
         new Date(Date.now() + input.expiryDays * 86400000).toISOString(),
       )
       writeAudit({
@@ -558,22 +563,30 @@ export const invitationRepo = {
         target: { type: 'invitation', id, email },
         metadata: { roleId: input.roleId },
       })
-      return (await invitationRepo.list(input.organizationId)).find((item) => item.id === id)!
+      const created = (await invitationRepo.list(input.organizationId))
+        .find((item) => item.id === id)!
+      // Returned exactly once, at creation. It is not stored in recoverable
+      // form and no later read can produce it — which is the point.
+      return { ...created, token }
     })
   },
 
-  async resend(invitationId: string, actorId: string, expiryDays: number): Promise<void> {
-    await transaction(async () => {
+  async resend(invitationId: string, actorId: string, expiryDays: number): Promise<string> {
+    return transaction(async () => {
       const existing = await one<Record<string, string | number | null>>(
         'SELECT * FROM invitation WHERE id = ?', invitationId,
       )
       if (!existing) throw new NotFoundError('Invitation not found')
 
+      // A resend issues a *new* token and invalidates the old one. Re-sending
+      // the same link would mean a link leaked once stays valid forever.
+      const token = newInvitationToken()
       await run(
         `UPDATE invitation SET status = 'pending', resent_at = ?, expires_at = ?,
-                               resend_count = resend_count + 1
+                               token_hash = ?, resend_count = resend_count + 1
          WHERE id = ?`,
-        nowIso(), new Date(Date.now() + expiryDays * 86400000).toISOString(), invitationId,
+        nowIso(), new Date(Date.now() + expiryDays * 86400000).toISOString(),
+        hashInvitationToken(token), invitationId,
       )
       writeAudit({
         event: 'member.invite_resent',
@@ -581,7 +594,111 @@ export const invitationRepo = {
         actorId,
         target: { type: 'invitation', id: invitationId, email: existing.email as string },
       })
+      return token
     })
+  },
+
+  /**
+   * Redeems a token: creates the member, consumes the invitation.
+   *
+   * Everything about the resulting account comes from the invitation row, never
+   * from the request — role, workspace, team and email. A caller who could
+   * choose their own role would have turned "invite a viewer" into "anyone with
+   * the link is an owner".
+   */
+  async accept(
+    token: string,
+    profile: { name: string; passwordHash: string },
+  ): Promise<{ memberId: string; organizationId: string; email: string }> {
+    return transaction(async () => {
+      const row = await one<Record<string, string | number | null>>(
+        'SELECT * FROM invitation WHERE token_hash = ?', hashInvitationToken(token),
+      )
+      // One message for every failure: a distinguishable "expired" versus
+      // "no such token" would let someone probe which tokens ever existed.
+      const invalid = new NotFoundError('That invitation link is not valid any more')
+      if (!row) throw invalid
+      if (row.status !== 'pending') throw invalid
+      if (new Date(row.expires_at as string).getTime() <= Date.now()) {
+        await run("UPDATE invitation SET status = 'expired' WHERE id = ?", row.id as string)
+        throw invalid
+      }
+
+      const email = (row.email as string).toLowerCase()
+      if (await one<{ id: string }>(
+        'SELECT id FROM member WHERE organization_id = ? AND lower(email) = ?',
+        row.organization_id as string, email,
+      )) {
+        throw new ConflictError('That email already belongs to a member of this organization')
+      }
+
+      const memberId = newId('mem')
+      await run(
+        `INSERT INTO member
+           (id, organization_id, user_id, email, name, role_id, status,
+            email_verified_at, invited_by_id, invited_at, approved_at,
+            password_hash, must_change_password, password_changed_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, 'approved', ?, ?, ?, ?, ?, ?, ?, ?)`,
+        memberId, row.organization_id as string, newId('user'), email,
+        profile.name.trim(), row.role_id as string,
+        // Redeeming a token sent to that address is the verification.
+        nowIso(), row.invited_by_id as string, row.invited_at as string, nowIso(),
+        profile.passwordHash, toBit(false), nowIso(), nowIso(),
+      )
+      await run(
+        'INSERT INTO member_workspace (member_id, workspace_id) VALUES (?, ?)',
+        memberId, row.workspace_id as string,
+      )
+      if (row.team_id) {
+        await run(
+          'INSERT INTO member_team (member_id, team_id) VALUES (?, ?)',
+          memberId, row.team_id as string,
+        )
+      }
+
+      // Single use: the token is spent, not merely marked.
+      await run(
+        "UPDATE invitation SET status = 'accepted', accepted_at = ?, token_hash = ? WHERE id = ?",
+        nowIso(), `spent:${row.id as string}`, row.id as string,
+      )
+
+      writeAudit({
+        event: 'member.accepted',
+        organizationId: row.organization_id as string,
+        workspaceId: row.workspace_id as string,
+        actorId: memberId,
+        target: { type: 'member', id: memberId, name: profile.name.trim(), email },
+        metadata: { roleId: row.role_id, invitationId: row.id },
+      })
+
+      return { memberId, organizationId: row.organization_id as string, email }
+    })
+  },
+
+  /** Public preview for the acceptance screen: who invited you, and to what. */
+  async preview(token: string): Promise<
+    { email: string; organizationName: string; roleId: string; invitedBy: string } | null
+  > {
+    const row = await one<{
+      email: string; role_id: string; status: string; expires_at: string
+      organization_name: string; invited_by: string | null
+    }>(
+      `SELECT i.email, i.role_id, i.status, i.expires_at,
+              o.name AS organization_name, m.name AS invited_by
+         FROM invitation i
+         JOIN organization o ON o.id = i.organization_id
+         LEFT JOIN member m ON m.id = i.invited_by_id
+        WHERE i.token_hash = ?`,
+      hashInvitationToken(token),
+    )
+    if (!row || row.status !== 'pending') return null
+    if (new Date(row.expires_at).getTime() <= Date.now()) return null
+    return {
+      email: row.email,
+      organizationName: row.organization_name,
+      roleId: row.role_id,
+      invitedBy: row.invited_by ?? 'an administrator',
+    }
   },
 
   async cancel(invitationId: string, actorId: string): Promise<void> {

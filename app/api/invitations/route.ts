@@ -4,6 +4,7 @@ import { invitationRepo, orgRepo } from '@/lib/db/repositories'
 import { PERMISSIONS } from '@/lib/rbac/permissions'
 import { assignableRoles } from '@/lib/rbac/roles'
 import type { RoleId } from '@/lib/rbac/types'
+import { invitationLink } from '@/lib/auth/invitation-token'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,7 +29,7 @@ export const POST = route({ permission: PERMISSIONS.MEMBERS_INVITE }, async (con
   }
 
   const organization = await orgRepo.get(context.organizationId)
-  return await invitationRepo.create(
+  const invitation = await invitationRepo.create(
     {
       organizationId: context.organizationId,
       email: input.email,
@@ -39,4 +40,14 @@ export const POST = route({ permission: PERMISSIONS.MEMBERS_INVITE }, async (con
     },
     context.memberId,
   )
+
+  // The link is returned once, here, and is not recoverable afterwards — only
+  // its hash is stored. Until there is an email provider the inviter is the
+  // delivery mechanism, so they need it in their hands; the alternative is an
+  // invitation nobody can act on, which is what this replaced.
+  return {
+    ...invitation,
+    token: undefined,
+    acceptUrl: invitationLink(invitation.token, new URL(request.url).origin),
+  }
 })

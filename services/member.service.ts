@@ -25,11 +25,12 @@ export const memberService = {
   listInvitations: (signal?: AbortSignal) =>
     request<Invitation[]>('/api/invitations', { signal }),
 
+  /** `acceptUrl` is returned once, at creation, and never again. */
   invite: (input: { email: string; roleId: RoleId; workspaceId: string; teamId?: string }) =>
-    request<Invitation>('/api/invitations', { method: 'POST', body: input }),
+    request<Invitation & { acceptUrl: string }>('/api/invitations', { method: 'POST', body: input }),
 
   invitationAction: (invitationId: string, action: 'resend' | 'cancel') =>
-    request<{ ok: true }>(`/api/invitations/${invitationId}`, {
+    request<{ ok: true; acceptUrl?: string }>(`/api/invitations/${invitationId}`, {
       method: 'POST', body: { action },
     }),
 
