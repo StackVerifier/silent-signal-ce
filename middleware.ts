@@ -20,9 +20,12 @@ function isPrefixed(pathname: string, prefixes: string[]) {
  * data-returning route handler must re-check permissions server-side, because a
  * client can always call the API directly.
  */
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl
-  const claims = decodeClaims(request.cookies.get(SESSION_COOKIE)?.value ?? '')
+  // Verifying the signature is what makes these claims worth reading at all.
+  // An unsigned cookie is attacker input, and treating it as identity is a
+  // complete authentication bypass.
+  const claims = await decodeClaims(request.cookies.get(SESSION_COOKIE)?.value ?? '')
   const isPublic = isPrefixed(pathname, PUBLIC_PREFIXES)
 
   if (!claims) {

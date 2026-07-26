@@ -18,27 +18,46 @@ export interface ServerSession {
 /**
  * Server-side view of the session, for Server Components and route handlers.
  *
- * It resolves permissions from the same claims and the same pure functions the
- * middleware and the client use, so a permission decision cannot differ between
- * where content is filtered and where navigation is gated.
+ * Two checks, and both are needed:
  *
- * Status gating applies here too: a pending member resolves to an empty
- * permission set, so restricted content is never rendered into their payload.
+ *  1. The cookie's signature must verify. Without it the claims are attacker
+ *     input and anyone can mint themselves an owner session.
+ *  2. The member is re-read from the database, and role and status come from
+ *     *there*, not from the cookie. Otherwise suspending someone would not take
+ *     effect until their cookie expired — up to seven days of access after an
+ *     administrator believed they had revoked it. The same read is what makes a
+ *     role change apply on the next request.
+ *
+ * Permissions then resolve through the same pure functions the middleware and
+ * the client use, so a decision cannot differ between where content is filtered
+ * and where navigation is gated.
  */
 export async function getServerSession(): Promise<ServerSession | null> {
   const store = await cookies()
-  const claims = decodeClaims(store.get(SESSION_COOKIE)?.value ?? '')
+  const claims = await decodeClaims(store.get(SESSION_COOKIE)?.value ?? '')
   if (!claims) return null
 
-  const role = resolveRole(claims.roleId)
-  const permissions = STATUS_GRANTS_DATA_ACCESS[claims.status] ? role.permissions : []
+  const { memberRepo } = await import('./db/repositories')
+  const member = await memberRepo.get(claims.memberId).catch(() => null)
+  // Deleted, or a signed cookie for a member who no longer exists.
+  if (!member) return null
+  // A cookie is scoped to one organization; it must not carry over if the
+  // member was moved.
+  if (member.organizationId !== claims.organizationId) return null
+
+  const role = resolveRole(member.roleId)
+  const permissions = STATUS_GRANTS_DATA_ACCESS[member.status] ? role.permissions : []
 
   return {
-    memberId: claims.memberId,
-    organizationId: claims.organizationId,
-    workspaceId: claims.workspaceId,
-    roleId: claims.roleId,
-    status: claims.status,
+    memberId: member.id,
+    organizationId: member.organizationId,
+    // The workspace is the one the member chose and is a preference, not a
+    // privilege — but it still has to be one they belong to.
+    workspaceId: claims.workspaceId && member.workspaceIds.includes(claims.workspaceId)
+      ? claims.workspaceId
+      : member.workspaceIds[0] ?? null,
+    roleId: member.roleId,
+    status: member.status,
     permissions,
   }
 }

@@ -39,7 +39,9 @@ There are also demo personas for seeing each role's view, password `admin123`:
 | `faruk@boyner.com.tr` | Pending | The locked, skeleton-only experience |
 | `hakan@boyner.com.tr` | Suspended | The account-suspended screen |
 
-> Sessions are issued server-side and the cookie is `httpOnly`; passwords are verified against a stored scrypt hash, and the login endpoint is rate limited per account and per address. What is still missing is the surrounding lifecycle — email verification and password reset.
+> Sessions are issued server-side, the cookie is `httpOnly` and **HMAC-signed**, and role and status are re-read from the database on every request — so suspending someone takes effect immediately rather than when their cookie expires. Set `SESSION_SECRET` before deploying; production refuses to start a session without it.
+>
+> Passwords: passwords are verified against a stored scrypt hash, and the login endpoint is rate limited per account and per address. What is still missing is the surrounding lifecycle — email verification and password reset.
 
 ## All commands
 
