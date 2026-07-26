@@ -3,6 +3,7 @@
 import { SettingsPageHeader } from '@/components/settings/page-header'
 import { motion } from 'framer-motion'
 import { Mail, Calendar, Save, ShieldCheck } from 'lucide-react'
+import { useUpdateProfile } from '@/lib/query/hooks'
 import { useAuth } from '@/lib/auth-context'
 import { useToast } from '@/components/ui/toast'
 import { useState } from 'react'
@@ -11,7 +12,6 @@ import { MemberStatusBadge } from '@/components/members/member-status-badge'
 
 export default function ProfilePage() {
   const { member, role, organization } = useAuth()
-  const toast = useToast()
   const [passwordOpen, setPasswordOpen] = useState(false)
   if (!member) return null
 
@@ -53,42 +53,15 @@ export default function ProfilePage() {
             </div>
           </motion.div>
 
-          {/* Preferences */}
+          {/* Your details */}
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
             className="p-6 rounded-lg bg-[#0F1824] border border-[#1E2D4A]"
           >
-            <h2 className="text-lg font-semibold text-[#E2E8F0] mb-4">Preferences</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-[#E2E8F0] mb-2">Theme</label>
-                <select className="w-full px-3 py-2 rounded-lg bg-[#070B18] border border-[#1E2D4A] text-[#E2E8F0] focus:outline-none focus:border-[#6C63FF]">
-                  <option>Light</option>
-                  <option>Dark</option>
-                  <option>System</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-[#E2E8F0] mb-2">Language</label>
-                <select className="w-full px-3 py-2 rounded-lg bg-[#070B18] border border-[#1E2D4A] text-[#E2E8F0] focus:outline-none focus:border-[#6C63FF]">
-                  <option>English</option>
-                  <option>Spanish</option>
-                  <option>French</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" defaultChecked className="rounded" />
-                  <span className="text-sm text-[#E2E8F0]">Email notifications</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" defaultChecked className="rounded" />
-                  <span className="text-sm text-[#E2E8F0]">Desktop notifications</span>
-                </label>
-              </div>
-            </div>
+            <h2 className="text-lg font-semibold text-[#E2E8F0] mb-4">Your details</h2>
+            <ProfileForm currentName={member.name} email={member.email} />
           </motion.div>
 
           {/* Security */}
@@ -112,23 +85,89 @@ export default function ProfilePage() {
             )}
           </motion.div>
 
-          {/* Save */}
-          <motion.button
-            onClick={() =>
-              toast.success('Preferences saved', 'Your profile settings have been updated.')
-            }
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.3 }}
-            className="flex items-center gap-2 px-6 py-2.5 bg-[#6C63FF] hover:bg-[#5B52CC] text-white rounded-lg font-medium transition-colors"
-          >
-            <Save className="w-4 h-4" />
-            Save Changes
-          </motion.button>
         </div>
       </div>
 
       <ChangePasswordDialog open={passwordOpen} onClose={() => setPasswordOpen(false)} />
     </div>
+  )
+}
+
+/**
+ * The one thing on this page a member can actually change about themselves.
+ *
+ * This screen previously offered a theme picker, a language picker and two
+ * notification toggles, then a Save button that showed "Preferences saved" and
+ * wrote nothing. None of the four had anything behind them — no i18n, no push,
+ * no mail transport — so they have been removed rather than given somewhere to
+ * persist. A stored preference that controls nothing is the same lie one layer
+ * down, and harder to notice.
+ */
+function ProfileForm({ currentName, email }: { currentName: string; email: string }) {
+  const toast = useToast()
+  const updateProfile = useUpdateProfile()
+  const [name, setName] = useState(currentName)
+
+  const dirty = name.trim() !== currentName && name.trim().length > 0
+
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault()
+    try {
+      await updateProfile.mutateAsync({ name: name.trim() })
+      toast.success('Profile updated', 'Your name has been changed.')
+    } catch (error) {
+      toast.error(
+        'Could not save',
+        error instanceof Error ? error.message : 'Please try again.',
+      )
+    }
+  }
+
+  return (
+    <form onSubmit={save} className="space-y-4">
+      <div>
+        <label htmlFor="profile-name" className="block text-[11px] font-medium text-[#94A3B8] mb-1.5">
+          Display name
+        </label>
+        <input
+          id="profile-name"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          maxLength={120}
+          className="w-full h-10 px-3 rounded-lg bg-[#070B18] border border-[#1E2D4A] text-sm text-[#E2E8F0] focus:outline-none focus:border-[#6C63FF] transition-colors"
+        />
+        <p className="text-[10px] text-[#64748B] mt-1">
+          Shown on your activity and in the audit log.
+        </p>
+      </div>
+
+      <div>
+        <label htmlFor="profile-email" className="block text-[11px] font-medium text-[#94A3B8] mb-1.5">
+          Email
+        </label>
+        <input
+          id="profile-email"
+          value={email}
+          readOnly
+          aria-readonly="true"
+          className="w-full h-10 px-3 rounded-lg bg-[#070B18] border border-[#1E2D4A] text-sm text-[#64748B] cursor-not-allowed"
+        />
+        <p className="text-[10px] text-[#64748B] mt-1">
+          {/* Changing it needs a verification round trip, which needs an email
+              provider. Rather than accept a new address and never confirm it,
+              the field stays read-only. */}
+          Changing your email needs administrator help for now.
+        </p>
+      </div>
+
+      <button
+        type="submit"
+        disabled={!dirty || updateProfile.isPending}
+        className="flex items-center gap-2 px-5 py-2 rounded-lg bg-[#6C63FF] hover:bg-[#5B52CC] disabled:bg-[#151D32] disabled:text-[#334155] text-white text-sm font-medium transition-colors"
+      >
+        <Save aria-hidden="true" className="w-4 h-4" />
+        {updateProfile.isPending ? 'Saving…' : 'Save changes'}
+      </button>
+    </form>
   )
 }

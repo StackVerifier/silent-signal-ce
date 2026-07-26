@@ -17,6 +17,7 @@ import { useAuth } from '@/lib/auth-context'
 import { PERMISSIONS } from '@/lib/rbac/permissions'
 import type { Rule } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { RuleDialog } from './rule-dialog'
 
 // ─── Category Config ──────────────────────────────────────────────────────────
 
@@ -279,6 +280,8 @@ function RuleCard({ rule, index }: { rule: Rule; index: number }) {
 // ─── Rule List ────────────────────────────────────────────────────────────────
 
 function RuleList({ allRules }: { allRules: Rule[] }) {
+  const canWrite = useAuth().can(PERMISSIONS.RULES_WRITE)
+  const [dialogOpen, setDialogOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('all')
@@ -300,10 +303,15 @@ function RuleList({ allRules }: { allRules: Rule[] }) {
       title="Rules"
       subtitle={`${filtered.length} of ${allRules.length} rules`}
       action={
-        <button className="flex items-center gap-1.5 text-xs text-[#6C63FF] hover:text-[#8B85FF] transition-colors border border-[#6C63FF]/30 px-3 py-1.5 rounded-lg hover:bg-[#6C63FF]/10">
-          <Plus className="w-3.5 h-3.5" />
-          New Rule
-        </button>
+        canWrite && (
+          <button
+            onClick={() => setDialogOpen(true)}
+            className="flex items-center gap-1.5 text-xs text-[#6C63FF] hover:text-[#8B85FF] transition-colors border border-[#6C63FF]/30 px-3 py-1.5 rounded-lg hover:bg-[#6C63FF]/10"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            New Rule
+          </button>
+        )
       }
     >
       {/* Filters */}
@@ -369,6 +377,8 @@ function RuleList({ allRules }: { allRules: Rule[] }) {
           ))
         )}
       </div>
+
+      <RuleDialog open={dialogOpen} onClose={() => setDialogOpen(false)} />
     </SectionCard>
   )
 }

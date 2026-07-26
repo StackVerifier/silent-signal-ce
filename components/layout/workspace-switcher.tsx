@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { CreateWorkspaceDialog } from './create-workspace-dialog'
 import { Check, ChevronsUpDown, Plus } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '@/lib/auth-context'
@@ -10,6 +11,7 @@ import { cn } from '@/lib/utils'
 export function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
   const { organization, workspace, workspaces, switchWorkspace, can } = useAuth()
   const [open, setOpen] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -102,7 +104,10 @@ export function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
 
             {can(PERMISSIONS.WORKSPACE_WRITE) && (
               <div className="border-t border-[#1E2D4A] mt-1">
-                <button className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-[#6C63FF] hover:bg-[#151D32] transition-colors">
+                <button
+                  onClick={() => { setOpen(false); setCreateOpen(true) }}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-[#6C63FF] hover:bg-[#151D32] transition-colors"
+                >
                   <Plus aria-hidden="true" className="w-3.5 h-3.5" />
                   Create workspace
                 </button>
@@ -111,6 +116,8 @@ export function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <CreateWorkspaceDialog open={createOpen} onClose={() => setCreateOpen(false)} />
     </div>
   )
 }

@@ -54,9 +54,15 @@ export default function BillingPage() {
                   )}
                 </p>
               </div>
-              <button className="px-4 py-2 bg-[#6C63FF] hover:bg-[#5B52CC] text-white rounded-lg font-medium text-sm transition-colors">
-                Upgrade
-              </button>
+              {/* No payment provider is wired up, so there is no checkout to
+                  open. A button that silently does nothing reads as a broken
+                  product; an email link is small but real. */}
+              <a
+                href={`mailto:sales@silentsignal.io?subject=${encodeURIComponent('Plan change request')}`}
+                className="px-4 py-2 bg-[#6C63FF] hover:bg-[#5B52CC] text-white rounded-lg font-medium text-sm transition-colors"
+              >
+                Change plan
+              </a>
             </div>
 
             <div className="grid grid-cols-3 gap-4 mt-6 pt-6 border-t border-[#6C63FF]/20">

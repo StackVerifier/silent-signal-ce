@@ -53,4 +53,6 @@ export const queryScopes = {
   allAudit: ['audit'] as const,
   allNotifications: ['notifications'] as const,
   allWebhooks: ['webhooks'] as const,
+  allWorkspaces: ['workspaces'] as const,
+  allRules: ['rules'] as const,
 }
