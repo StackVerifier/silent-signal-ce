@@ -97,8 +97,11 @@ components/          UI, split by feature (rbac, members, teams, help, layout)
 lib/rbac/            permissions, roles, access engine, navigation registry
 lib/query/           TanStack Query client, key registry, hooks
 lib/db/              driver (SQLite or Postgres), repositories, encryption
+lib/audit/           event catalogue, masking, visibility, retention
 lib/auth/            password hashing, login rate limiting
+assets/fonts/        the Unicode typeface embedded into every PDF
 lib/forms/           the Zod ↔ React Hook Form resolver
+lib/reports/         PDF and Excel report generation
 services/            one module per domain — thin HTTP clients
 tests/               Vitest, on the logic where being wrong is expensive
 app/api/             route handlers; the security boundary

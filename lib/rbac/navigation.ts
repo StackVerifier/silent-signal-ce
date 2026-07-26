@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Zap, GitBranch, FlaskConical, Clock, Shield, Bell,
-  Plug, Users, UsersRound, FileText, Building2, CreditCard, User, LifeBuoy,
+  Plug, Users, UsersRound, FileText, FileSpreadsheet, Building2, CreditCard, User, LifeBuoy,
   type LucideIcon,
 } from 'lucide-react'
 import { PERMISSIONS, type Permission } from './permissions'
@@ -84,6 +84,11 @@ export const NAV_ITEMS: NavItem[] = [
     id: 'members', label: 'Members', href: '/members', icon: Users,
     section: 'administration', permissions: [PERMISSIONS.MEMBERS_READ],
     keywords: ['people', 'invite', 'approve', 'users'],
+  },
+  {
+    id: 'reports', label: 'Reports', href: '/reports', icon: FileSpreadsheet,
+    section: 'workspace', permissions: [PERMISSIONS.REPORTS_READ],
+    keywords: ['export', 'pdf', 'excel', 'download', 'sprint', 'release', 'qa'],
   },
   {
     id: 'audit-log', label: 'Audit Log', href: '/audit-log', icon: FileText,

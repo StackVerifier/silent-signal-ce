@@ -53,6 +53,9 @@ export const PERMISSIONS = {
   BILLING_READ: 'billing.read',
   BILLING_WRITE: 'billing.write',
 
+  REPORTS_READ: 'reports.read',
+  REPORTS_EXPORT: 'reports.export',
+
   AUDIT_READ: 'audit.read',
   // Separate from AUDIT_READ on purpose: IP, device and session identify a
   // person's movements, and security events reveal the shape of the access
@@ -138,6 +141,8 @@ export const PERMISSION_GROUPS: { id: string; label: string; permissions: Permis
     id: 'governance',
     label: 'Governance & Billing',
     permissions: [
+      PERMISSIONS.REPORTS_READ,
+      PERMISSIONS.REPORTS_EXPORT,
       PERMISSIONS.AUDIT_READ,
       PERMISSIONS.AUDIT_READ_SENSITIVE,
       PERMISSIONS.AUDIT_EXPORT,
@@ -178,6 +183,8 @@ export const PERMISSION_DESCRIPTIONS: Record<Permission, string> = {
   'organization.write': 'Manage organization settings and SSO',
   'billing.read': 'View plan, usage and invoices',
   'billing.write': 'Change plan and payment details',
+  'reports.read': 'View the reports page',
+  'reports.export': 'Download PDF and Excel delivery reports',
   'audit.read': 'View the audit log',
   'audit.read_sensitive': 'See IP address, device, session and security events in the audit log',
   'audit.export': 'Export audit records',

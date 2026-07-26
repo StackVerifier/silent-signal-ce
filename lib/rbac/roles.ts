@@ -69,6 +69,8 @@ export const SYSTEM_ROLES: Record<SystemRoleId, RoleDefinition> = {
       P.ORGANIZATION_READ,
       P.INTEGRATION_READ,
       P.INTEGRATION_WRITE,
+      P.REPORTS_READ,
+      P.REPORTS_EXPORT,
       P.AUDIT_READ,
       P.AUDIT_READ_SENSITIVE,
       P.AUDIT_EXPORT,
@@ -95,6 +97,8 @@ export const SYSTEM_ROLES: Record<SystemRoleId, RoleDefinition> = {
       P.RULES_DELETE,
       P.NOTIFICATIONS_WRITE,
       P.TEAMS_READ,
+      P.REPORTS_READ,
+      P.REPORTS_EXPORT,
       // Read-only, without the sensitive grant.
       P.AUDIT_READ,
     ],
@@ -110,6 +114,7 @@ export const SYSTEM_ROLES: Record<SystemRoleId, RoleDefinition> = {
     // changed, not the IP every colleague signed in from.
     permissions: [
       ...DELIVERY_READ, P.SPRINT_WRITE, P.QA_READ, P.QA_WRITE, P.RULES_READ, P.TEAMS_READ,
+      P.REPORTS_READ, P.REPORTS_EXPORT,
       P.AUDIT_READ,
     ],
   },
