@@ -4,6 +4,15 @@ import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth-context'
 import { DEFAULT_DEMO_ACCOUNT, DEMO_ACCOUNTS } from '@/lib/auth-config'
+
+/**
+ * The password the seed gives every demo persona.
+ *
+ * A convenience for evaluating the product, and only ever true of a seeded
+ * database — the server verifies against a stored scrypt hash, so this string
+ * has no authority of its own.
+ */
+const DEMO_PASSWORD = 'admin123'
 import { Mail, Lock, ArrowRight, ShieldCheck } from 'lucide-react'
 import { motion } from 'framer-motion'
 
@@ -14,7 +23,7 @@ function LoginForm() {
   const searchParams = useSearchParams()
   const { login, isLoading } = useAuth()
   const [email, setEmail] = useState(DEFAULT_DEMO_ACCOUNT.email)
-  const [password, setPassword] = useState(DEFAULT_DEMO_ACCOUNT.password)
+  const [password, setPassword] = useState(DEMO_PASSWORD)
   const [error, setError] = useState('')
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -106,7 +115,7 @@ function LoginForm() {
       <div className="mt-6 p-3 rounded-lg bg-[#0F1824] border border-[#1E2D4A]">
         <p className="flex items-center gap-2 text-xs font-medium text-[#94A3B8]">
           <ShieldCheck aria-hidden="true" className="w-3.5 h-3.5 text-[#6C63FF]" />
-          Demo accounts — password <span className="font-mono text-[#E2E8F0]">{DEFAULT_DEMO_ACCOUNT.password}</span>
+          Demo accounts — password <span className="font-mono text-[#E2E8F0]">{DEMO_PASSWORD}</span>
         </p>
         <p className="text-[11px] text-[#64748B] mt-1">
           Pick a role to see how permissions, navigation and account status change.
@@ -118,7 +127,7 @@ function LoginForm() {
               type="button"
               onClick={() => {
                 setEmail(account.email)
-                setPassword(account.password)
+                setPassword(DEMO_PASSWORD)
                 setError('')
               }}
               className={`text-[10px] font-medium px-2 py-1 rounded-full border transition-colors ${

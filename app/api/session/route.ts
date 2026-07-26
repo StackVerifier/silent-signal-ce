@@ -96,7 +96,7 @@ async function sessionPayload(memberId: string, workspaceId: string | null) {
 
 async function setSessionCookie(claims: SessionClaims) {
   const store = await cookies()
-  store.set(SESSION_COOKIE, encodeClaims(claims), {
+  store.set(SESSION_COOKIE, await encodeClaims(claims), {
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
