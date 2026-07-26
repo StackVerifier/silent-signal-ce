@@ -5,6 +5,8 @@ import { getServerSession, type ServerSession } from '@/lib/auth-server'
 import { STATUS_GRANTS_DATA_ACCESS } from '@/lib/rbac/access'
 import type { Permission } from '@/lib/rbac/permissions'
 import { ConflictError, NotFoundError } from '@/lib/db/repositories'
+import { auditContextFrom, runWithAuditContext } from '@/lib/audit/context'
+import { writeAudit } from '@/lib/audit/repository'
 
 /**
  * Route-handler plumbing.
@@ -44,6 +46,18 @@ export function route<T>(
     }
 
     if (options.permission && !session.permissions.includes(options.permission)) {
+      // A refused attempt is the event an investigation most wants and the one
+      // most systems never record. Written outside any transaction, because
+      // there is no mutation to attach it to.
+      await runWithAuditContext(auditContextFrom(request, session.memberId), () =>
+        writeAudit({
+          event: 'authz.permission_denied',
+          organizationId: session.organizationId,
+          actorId: session.memberId,
+          status: 'denied',
+          metadata: { permission: options.permission, path: new URL(request.url).pathname },
+        }),
+      ).catch(() => undefined)
       return jsonError('You do not have permission for this action', 403, 'forbidden')
     }
 
@@ -51,8 +65,14 @@ export function route<T>(
     const workspaceId = headerWorkspace ?? session.workspaceId
     if (!workspaceId) return jsonError('No workspace in scope', 400, 'no_workspace')
 
+    // Everything the handler writes inherits this request's origin — IP,
+    // device, source and one correlation id — without a single repository
+    // signature having to mention HTTP.
+    const auditContext = auditContextFrom(request, session.memberId)
+
     try {
-      const result = await handler({ ...session, workspaceId }, request)
+      const result = await runWithAuditContext(auditContext, () =>
+        handler({ ...session, workspaceId }, request))
       return result === undefined
         ? new NextResponse(null, { status: 204 })
         : NextResponse.json(result)

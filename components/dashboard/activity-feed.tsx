@@ -1,48 +1,29 @@
 'use client'
 
 import Link from 'next/link'
-import {
-  Plus, Pencil, Trash2, UserPlus, UserMinus, Download, Check, X,
-  Ban, RotateCw, ArrowRightLeft, ShieldCheck, History, type LucideIcon,
-} from 'lucide-react'
+import { History } from 'lucide-react'
 import { useAuditLog } from '@/lib/query/hooks'
 import { useGatedQuery } from '@/hooks/use-gated-data'
 import { PERMISSIONS } from '@/lib/rbac/permissions'
-import type { AuditAction, AuditLog } from '@/lib/types'
+import { auditEvent } from '@/lib/audit/events'
+import { SEVERITY_STYLES } from '@/components/audit/severity'
+import type { AuditRecord } from '@/lib/audit/types'
 import { relativeTime } from '@/components/members/member-status-badge'
 import { EmptyState, ErrorState } from '@/components/states/data-states'
 import { Skeleton } from '@/components/ui/skeleton'
 
-const ACTION_META: Record<AuditAction, { icon: LucideIcon; color: string; verb: string }> = {
-  create: { icon: Plus, color: 'text-[#22C55E] bg-[#22C55E]/10', verb: 'created' },
-  update: { icon: Pencil, color: 'text-[#6C63FF] bg-[#6C63FF]/10', verb: 'updated' },
-  delete: { icon: Trash2, color: 'text-[#EF4444] bg-[#EF4444]/10', verb: 'deleted' },
-  invite: { icon: UserPlus, color: 'text-[#00D4FF] bg-[#00D4FF]/10', verb: 'invited' },
-  remove: { icon: UserMinus, color: 'text-[#EF4444] bg-[#EF4444]/10', verb: 'removed' },
-  export: { icon: Download, color: 'text-[#94A3B8] bg-[#94A3B8]/10', verb: 'exported' },
-  approve: { icon: Check, color: 'text-[#22C55E] bg-[#22C55E]/10', verb: 'approved' },
-  reject: { icon: X, color: 'text-[#EF4444] bg-[#EF4444]/10', verb: 'rejected' },
-  suspend: { icon: Ban, color: 'text-[#F59E0B] bg-[#F59E0B]/10', verb: 'suspended' },
-  activate: { icon: RotateCw, color: 'text-[#22C55E] bg-[#22C55E]/10', verb: 'reactivated' },
-  transfer: { icon: ArrowRightLeft, color: 'text-[#6C63FF] bg-[#6C63FF]/10', verb: 'transferred' },
-  permission_change: { icon: ShieldCheck, color: 'text-[#F59E0B] bg-[#F59E0B]/10', verb: 'changed permissions for' },
+/** "Bora Martinez · Member suspended · Hakan Şahin" — actor, event, target. */
+function describeTarget(entry: AuditRecord): string | null {
+  if (!entry.target) return null
+  return entry.target.name ?? entry.target.email ?? entry.target.id ?? null
 }
 
-/** Prefers a human label from metadata over an opaque id. */
-function describeTarget(entry: AuditLog): string {
-  const metadata = entry.metadata ?? {}
-  const label =
-    metadata.name ?? metadata.member ?? metadata.integration ?? metadata.invitedEmail
-  return label ? `${entry.resource} “${label}”` : `${entry.resource} ${entry.resourceId}`
-}
-
-function summariseChanges(entry: AuditLog): string | null {
-  if (!entry.changes) return null
-  const keys = Object.keys(entry.changes)
+function summariseChanges(entry: AuditRecord): string | null {
+  const keys = Object.keys(entry.changes ?? {})
   if (keys.length === 0) return null
   if (keys.length === 1) {
     const [key] = keys
-    const { before, after } = entry.changes[key]
+    const { before, after } = entry.changes![key]
     return `${key}: ${String(before)} → ${String(after)}`
   }
   return `${keys.length} fields changed`
@@ -54,7 +35,7 @@ function summariseChanges(entry: AuditLog): string | null {
  */
 export function ActivityFeed({ limit = 8 }: { limit?: number }) {
   const result = useGatedQuery(useAuditLog({ limit }), { permission: PERMISSIONS.AUDIT_READ })
-  const entries = (result.data?.data ?? [])
+  const entries = (result.data?.records ?? [])
     .slice()
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, limit)
@@ -110,17 +91,20 @@ export function ActivityFeed({ limit = 8 }: { limit?: number }) {
       ) : (
         <ol className="px-5 py-4 space-y-3.5">
           {entries.map((entry) => {
-            const meta = ACTION_META[entry.action]
+            const definition = auditEvent(entry.event)
+            const style = SEVERITY_STYLES[entry.severity]
             const changes = summariseChanges(entry)
+            const target = describeTarget(entry)
             return (
               <li key={entry.id} className="flex items-start gap-3">
-                <span className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${meta.color}`}>
-                  <meta.icon aria-hidden="true" className="w-3.5 h-3.5" />
+                <span className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${style.chip}`}>
+                  <style.Icon aria-hidden="true" className="w-3.5 h-3.5" />
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="text-xs text-[#94A3B8] leading-relaxed">
-                    <span className="font-medium text-[#E2E8F0]">{entry.user.name}</span>{' '}
-                    {meta.verb} {describeTarget(entry)}
+                    <span className="font-medium text-[#E2E8F0]">{entry.actor.name}</span>{' '}
+                    {definition.label.toLowerCase()}
+                    {target && <> · <span className="text-[#E2E8F0]">{target}</span></>}
                   </p>
                   {changes && (
                     <p className="text-[10px] font-mono text-[#64748B] mt-0.5 truncate">{changes}</p>

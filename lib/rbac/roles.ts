@@ -70,6 +70,8 @@ export const SYSTEM_ROLES: Record<SystemRoleId, RoleDefinition> = {
       P.INTEGRATION_READ,
       P.INTEGRATION_WRITE,
       P.AUDIT_READ,
+      P.AUDIT_READ_SENSITIVE,
+      P.AUDIT_EXPORT,
       P.SETTINGS_WRITE,
     ],
   },
@@ -93,6 +95,8 @@ export const SYSTEM_ROLES: Record<SystemRoleId, RoleDefinition> = {
       P.RULES_DELETE,
       P.NOTIFICATIONS_WRITE,
       P.TEAMS_READ,
+      // Read-only, without the sensitive grant.
+      P.AUDIT_READ,
     ],
   },
 
@@ -102,7 +106,12 @@ export const SYSTEM_ROLES: Record<SystemRoleId, RoleDefinition> = {
     description: 'Owns the QA queue. Reads releases, rules and notifications.',
     isSystem: true,
     tier: 50,
-    permissions: [...DELIVERY_READ, P.SPRINT_WRITE, P.QA_READ, P.QA_WRITE, P.RULES_READ, P.TEAMS_READ],
+    // Audit read without the sensitive grant: a QA lead can see that a rule
+    // changed, not the IP every colleague signed in from.
+    permissions: [
+      ...DELIVERY_READ, P.SPRINT_WRITE, P.QA_READ, P.QA_WRITE, P.RULES_READ, P.TEAMS_READ,
+      P.AUDIT_READ,
+    ],
   },
 
   developer: {

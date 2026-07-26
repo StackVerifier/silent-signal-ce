@@ -168,23 +168,76 @@ CREATE TABLE IF NOT EXISTS notification (
 CREATE INDEX IF NOT EXISTS idx_notification_member
   ON notification(member_id, read, created_at DESC);
 
+-- The audit log is a compliance record, not an activity feed. Every column
+-- here exists to answer a question an investigator actually asks: who acted,
+-- on what, from where, through which interface, and to what value.
+--
+-- Nothing in this table is ever updated. Records are append-only by
+-- convention — the repository exposes no update path — because a mutable audit
+-- log is not evidence of anything.
 CREATE TABLE IF NOT EXISTS audit_log (
   id               INTEGER PRIMARY KEY AUTOINCREMENT,
-  organization_id  TEXT NOT NULL REFERENCES organization(id) ON DELETE CASCADE,
+
+  -- Event identity. `event` names a catalogue entry; category and severity are
+  -- denormalised from it so filtering does not need the application's help,
+  -- and so a record keeps the severity it had when it was written even if the
+  -- catalogue is later re-tuned.
+  event            TEXT NOT NULL DEFAULT 'system.job_run',
+  category         TEXT NOT NULL DEFAULT 'system',
+  severity         TEXT NOT NULL DEFAULT 'info',
+  status           TEXT NOT NULL DEFAULT 'success',
+  source           TEXT NOT NULL DEFAULT 'dashboard',
+
+  -- Scope. Nullable on purpose: a failed sign-in for an address that matches no
+  -- account belongs to no tenant, and dropping the record would leave the log
+  -- silent about exactly the traffic worth watching — someone guessing at
+  -- addresses. Those rows are platform-level and do not appear in
+  -- organization-scoped queries.
+  organization_id  TEXT REFERENCES organization(id) ON DELETE CASCADE,
   workspace_id     TEXT,
+  workspace_name   TEXT,
+  team_id          TEXT,
+  team_name        TEXT,
+
+  -- Actor: names and role are captured at write time. Ids outlive names, and
+  -- an investigator needs to know the role held *then*, not the role held now.
   actor_id         TEXT,
   actor_name       TEXT NOT NULL,
   actor_email      TEXT NOT NULL,
   actor_avatar     TEXT,
+  actor_role       TEXT,
+
+  -- Target: the other end of "Bora suspended Hakan".
+  target_type      TEXT,
+  target_id        TEXT,
+  target_name      TEXT,
+  target_email     TEXT,
+
+  -- Legacy shape, retained so existing readers and rows keep working.
   action           TEXT NOT NULL,
   resource         TEXT NOT NULL,
   resource_id      TEXT,
+
   changes          TEXT,
   metadata         TEXT,
+  relations        TEXT,
+
+  -- Forensics. Sensitive: only readers holding audit.read_sensitive see these.
+  ip_address       TEXT,
+  user_agent       TEXT,
+  device           TEXT,
+  session_id       TEXT,
+  correlation_id   TEXT,
+
   created_at       TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_audit_org_time ON audit_log(organization_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_category ON audit_log(organization_id, category, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_severity ON audit_log(organization_id, severity, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_log(organization_id, actor_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_target ON audit_log(organization_id, target_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_correlation ON audit_log(correlation_id);
 
 -- ─── Delivery data ───────────────────────────────────────────────────────────
 -- Jira owns these once syncing is live; seeded now so the product has content.
