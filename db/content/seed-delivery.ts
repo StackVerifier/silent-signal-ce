@@ -113,17 +113,17 @@ export const sprints: Sprint[] = [
     riskLevel: 'MEDIUM',
     blockedCount: 3,
     addedMidSprintCount: 5,
-    team: 'Platform',
+    team: 'Backend Team',
     issues: [
-      { id: 'i1', key: 'PAY-123', title: 'Fix payment gateway timeout', status: 'Development Done', priority: 'Critical', assignee: 'Sarah K.', storyPoints: 8, daysInStatus: 5, labels: ['payment', 'regression'], riskScore: 82, releaseId: 'r1' },
-      { id: 'i2', key: 'ORD-456', title: 'Order state machine refactor', status: 'Blocked', priority: 'High', assignee: 'Mike T.', storyPoints: 13, daysInStatus: 4, blockedBy: ['PAY-091'], labels: ['order', 'blocked'], riskScore: 71, releaseId: 'r1' },
-      { id: 'i3', key: 'CHK-089', title: 'Checkout flow redesign', status: 'In Progress', priority: 'Medium', assignee: 'Elena R.', storyPoints: 5, daysInStatus: 2, labels: ['checkout', 'ui'], riskScore: 35, releaseId: 'r1' },
-      { id: 'i4', key: 'AUTH-034', title: 'JWT refresh token bug', status: 'QA', priority: 'High', assignee: 'James W.', storyPoints: 3, daysInStatus: 3, labels: ['auth', 'security'], riskScore: 44, releaseId: 'r1' },
-      { id: 'i5', key: 'PAY-145', title: 'Subscription billing cycle fix', status: 'Development Done', priority: 'Critical', assignee: 'Sarah K.', storyPoints: 8, daysInStatus: 2, labels: ['payment', 'billing'], riskScore: 68, releaseId: 'r1' },
-      { id: 'i6', key: 'ORD-222', title: 'Inventory sync race condition', status: 'QA', priority: 'High', assignee: 'Lisa M.', storyPoints: 5, daysInStatus: 4, labels: ['order', 'sync'], riskScore: 59, releaseId: 'r1' },
-      { id: 'i7', key: 'CHK-091', title: 'Promo code validation', status: 'Done', priority: 'Medium', assignee: 'Tom A.', storyPoints: 3, daysInStatus: 0, labels: ['checkout', 'promo'], riskScore: 5, releaseId: 'r1' },
-      { id: 'i8', key: 'API-012', title: 'Rate limiter config update', status: 'Done', priority: 'Low', assignee: 'Chris B.', storyPoints: 2, daysInStatus: 0, labels: ['api', 'config'], riskScore: 3, releaseId: 'r1' },
-      { id: 'i9', key: 'INFRA-005', title: 'K8s resource limits', status: 'In Review', priority: 'Medium', assignee: 'Dave P.', storyPoints: 5, daysInStatus: 1, labels: ['infra', 'k8s'], riskScore: 22, releaseId: 'r1' },
+      { id: 'i1', key: 'PAY-123', title: 'Fix payment gateway timeout', status: 'Development Done', priority: 'Critical', assignee: 'Alice Chen', storyPoints: 8, daysInStatus: 5, labels: ['payment', 'regression'], riskScore: 82, releaseId: 'r1' },
+      { id: 'i2', key: 'ORD-456', title: 'Order state machine refactor', status: 'Blocked', priority: 'High', assignee: 'Bora Martinez', storyPoints: 13, daysInStatus: 4, blockedBy: ['PAY-091'], labels: ['order', 'blocked'], riskScore: 71, releaseId: 'r1' },
+      { id: 'i3', key: 'CHK-089', title: 'Checkout flow redesign', status: 'In Progress', priority: 'Medium', assignee: 'Deniz Lopez', storyPoints: 5, daysInStatus: 2, labels: ['checkout', 'ui'], riskScore: 35, releaseId: 'r1' },
+      { id: 'i4', key: 'AUTH-034', title: 'JWT refresh token bug', status: 'QA', priority: 'High', assignee: 'İrem Yıldız', storyPoints: 3, daysInStatus: 3, labels: ['auth', 'security'], riskScore: 44, releaseId: 'r1' },
+      { id: 'i5', key: 'PAY-145', title: 'Subscription billing cycle fix', status: 'Development Done', priority: 'Critical', assignee: 'Alice Chen', storyPoints: 8, daysInStatus: 2, labels: ['payment', 'billing'], riskScore: 68, releaseId: 'r1' },
+      { id: 'i6', key: 'ORD-222', title: 'Inventory sync race condition', status: 'QA', priority: 'High', assignee: 'Gizem Aydın', storyPoints: 5, daysInStatus: 4, labels: ['order', 'sync'], riskScore: 59, releaseId: 'r1' },
+      { id: 'i7', key: 'CHK-091', title: 'Promo code validation', status: 'Done', priority: 'Medium', assignee: 'Hakan Şahin', storyPoints: 3, daysInStatus: 0, labels: ['checkout', 'promo'], riskScore: 5, releaseId: 'r1' },
+      { id: 'i8', key: 'API-012', title: 'Rate limiter config update', status: 'Done', priority: 'Low', assignee: 'Cem Patel', storyPoints: 2, daysInStatus: 0, labels: ['api', 'config'], riskScore: 3, releaseId: 'r1' },
+      { id: 'i9', key: 'INFRA-005', title: 'K8s resource limits', status: 'In Review', priority: 'Medium', assignee: 'Elif Kaya', storyPoints: 5, daysInStatus: 1, labels: ['infra', 'k8s'], riskScore: 22, releaseId: 'r1' },
     ],
   },
   {
@@ -140,7 +140,7 @@ export const sprints: Sprint[] = [
     riskLevel: 'LOW',
     blockedCount: 1,
     addedMidSprintCount: 2,
-    team: 'Platform',
+    team: 'Backend Team',
     issues: [],
   },
 ]
@@ -170,9 +170,9 @@ export const releases: Release[] = [
       { name: 'Sign-off',    status: 'blocked',     percent: 0,   issueCount: 0 },
     ],
     blockingIssues: [
-      { id: 'bi1', key: 'PAY-123', title: 'Regression suite not complete', status: 'Development Done', priority: 'Critical', assignee: 'Sarah K.', storyPoints: 8, daysInStatus: 5, labels: ['regression'], riskScore: 82 },
+      { id: 'bi1', key: 'PAY-123', title: 'Regression suite not complete', status: 'Development Done', priority: 'Critical', assignee: 'Alice Chen', storyPoints: 8, daysInStatus: 5, labels: ['regression'], riskScore: 82 },
       { id: 'bi2', key: 'ORD-222', title: 'QA waiting 4 days', status: 'QA', priority: 'High', assignee: 'Unassigned', storyPoints: 5, daysInStatus: 4, labels: ['qa'], riskScore: 59 },
-      { id: 'bi3', key: 'AUTH-034', title: 'Token refresh edge case fails', status: 'QA', priority: 'High', assignee: 'James W.', storyPoints: 3, daysInStatus: 3, labels: ['auth', 'security'], riskScore: 44 },
+      { id: 'bi3', key: 'AUTH-034', title: 'Token refresh edge case fails', status: 'QA', priority: 'High', assignee: 'İrem Yıldız', storyPoints: 3, daysInStatus: 3, labels: ['auth', 'security'], riskScore: 44 },
     ],
     services: ['Payment Service', 'Order Service', 'Checkout', 'Auth Service'],
     teamCount: 12,
@@ -206,20 +206,20 @@ export const releases: Release[] = [
 
 export const qaQueue: QAItem[] = [
   { id: 'qa1', issueKey: 'PAY-123', title: 'Payment gateway timeout fix', priority: 'Critical', assignee: 'Unassigned', waitingDays: 5, status: 'Waiting', service: 'Payment', riskScore: 82, reopenCount: 2 },
-  { id: 'qa2', issueKey: 'ORD-222', title: 'Inventory sync race condition', priority: 'High', assignee: 'Lisa M.', waitingDays: 4, status: 'In Progress', service: 'Order', riskScore: 59, reopenCount: 1 },
+  { id: 'qa2', issueKey: 'ORD-222', title: 'Inventory sync race condition', priority: 'High', assignee: 'Gizem Aydın', waitingDays: 4, status: 'In Progress', service: 'Order', riskScore: 59, reopenCount: 1 },
   { id: 'qa3', issueKey: 'PAY-145', title: 'Subscription billing cycle fix', priority: 'Critical', assignee: 'Unassigned', waitingDays: 2, status: 'Waiting', service: 'Payment', riskScore: 68, reopenCount: 0 },
-  { id: 'qa4', issueKey: 'AUTH-034', title: 'JWT refresh token bug', priority: 'High', assignee: 'James W.', waitingDays: 3, status: 'Regression', service: 'Auth', riskScore: 44, reopenCount: 1 },
-  { id: 'qa5', issueKey: 'CHK-089', title: 'Checkout flow UX fix', priority: 'Medium', assignee: 'Lisa M.', waitingDays: 3, status: 'In Progress', service: 'Checkout', riskScore: 35, reopenCount: 0 },
+  { id: 'qa4', issueKey: 'AUTH-034', title: 'JWT refresh token bug', priority: 'High', assignee: 'İrem Yıldız', waitingDays: 3, status: 'Regression', service: 'Auth', riskScore: 44, reopenCount: 1 },
+  { id: 'qa5', issueKey: 'CHK-089', title: 'Checkout flow UX fix', priority: 'Medium', assignee: 'Gizem Aydın', waitingDays: 3, status: 'In Progress', service: 'Checkout', riskScore: 35, reopenCount: 0 },
   { id: 'qa6', issueKey: 'ORD-456', title: 'Order state machine edge case', priority: 'High', assignee: 'Unassigned', waitingDays: 1, status: 'Waiting', service: 'Order', riskScore: 71, reopenCount: 0 },
-  { id: 'qa7', issueKey: 'API-019', title: 'Rate limit header missing', priority: 'Medium', assignee: 'Tom A.', waitingDays: 2, status: 'In Progress', service: 'API Gateway', riskScore: 28, reopenCount: 0 },
+  { id: 'qa7', issueKey: 'API-019', title: 'Rate limit header missing', priority: 'Medium', assignee: 'Hakan Şahin', waitingDays: 2, status: 'In Progress', service: 'API Gateway', riskScore: 28, reopenCount: 0 },
   { id: 'qa8', issueKey: 'INFRA-005', title: 'Memory leak in worker process', priority: 'High', assignee: 'Unassigned', waitingDays: 1, status: 'Blocked', service: 'Infrastructure', riskScore: 51, reopenCount: 0 },
 ]
 
 export const qaTesters: QATester[] = [
-  { name: 'Lisa M.',  avatar: 'LM', capacity: 94, assigned: 4, completed: 12 },
-  { name: 'James W.', avatar: 'JW', capacity: 87, assigned: 3, completed: 9 },
-  { name: 'Tom A.',   avatar: 'TA', capacity: 72, assigned: 2, completed: 15 },
-  { name: 'Priya S.', avatar: 'PS', capacity: 45, assigned: 1, completed: 8 },
+  { name: 'Gizem Aydın',  avatar: 'LM', capacity: 94, assigned: 4, completed: 12 },
+  { name: 'İrem Yıldız', avatar: 'JW', capacity: 87, assigned: 3, completed: 9 },
+  { name: 'Hakan Şahin',   avatar: 'TA', capacity: 72, assigned: 2, completed: 15 },
+  { name: 'Jale Öz', avatar: 'PS', capacity: 45, assigned: 1, completed: 8 },
 ]
 
 // ─── Rules ────────────────────────────────────────────────────────────────────
